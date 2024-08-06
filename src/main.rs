@@ -1,5 +1,8 @@
+mod data;
 mod elements;
 
+use data::packet_subscription;
+use data::postal_packet::PostalPacket;
 use elements::layout::Layout;
 use iced::executor;
 use iced::keyboard;
@@ -9,6 +12,7 @@ use iced::{
     color, Alignment, Application, Command, Element, Font, Length, Point, Rectangle, Renderer,
     Settings, Subscription, Theme,
 };
+use pcap::Packet;
 
 pub fn main() -> iced::Result {
     Postal::run(Settings::default())
@@ -19,12 +23,14 @@ struct Postal {
     layout: Layout,
     explain: bool,
     theme: Theme,
+    packets: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 enum Message {
     ExplainToggled(bool),
     ThemeSelected(Theme),
+    PacketReceived(PostalPacket),
 }
 
 impl Application for Postal {
@@ -39,13 +45,14 @@ impl Application for Postal {
                 layout: Layout::default(),
                 explain: false,
                 theme: Theme::GruvboxLight,
+                packets: vec![],
             },
             Command::none(),
         )
     }
 
     fn title(&self) -> String {
-        format!("{}", self.layout.title)
+        self.layout.title.to_string()
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
@@ -56,23 +63,29 @@ impl Application for Postal {
             Message::ThemeSelected(theme) => {
                 self.theme = theme;
             }
+            Message::PacketReceived(p) => {
+                if self.packets.len() < 20 {
+                    self.packets.push(p.to_string())
+                }
+            }
         }
 
         Command::none()
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        use keyboard::key;
+        packet_subscription::pcap_subscribe().map(Message::PacketReceived)
+        // use keyboard::key;
 
-        keyboard::on_key_release(|key, _modifiers| match key {
-            keyboard::Key::Named(key::Named::ArrowLeft) => Some(Message::ExplainToggled(false)),
-            keyboard::Key::Named(key::Named::ArrowRight) => Some(Message::ExplainToggled(true)),
-            _ => None,
-        })
+        // keyboard::on_key_release(|key, _modifiers| match key {
+        //     keyboard::Key::Named(key::Named::ArrowLeft) => Some(Message::ExplainToggled(false)),
+        //     keyboard::Key::Named(key::Named::ArrowRight) => Some(Message::ExplainToggled(true)),
+        //     _ => None,
+        // })
     }
 
     fn view(&self) -> Element<Message> {
-        let header = row![
+        let footer = row![
             text(self.layout.title).size(20).font(Font::MONOSPACE),
             horizontal_space(),
             checkbox("Explain", self.explain).on_toggle(Message::ExplainToggled),
@@ -81,10 +94,10 @@ impl Application for Postal {
         .spacing(20)
         .align_items(Alignment::Center);
 
-        let example = container(if self.explain {
-            self.layout.view().explain(color!(0x0000ff))
+        let main = container(if self.explain {
+            self.layout.view(&self.packets).explain(color!(0x0000ff))
         } else {
-            self.layout.view()
+            self.layout.view(&self.packets)
         })
         .style(|theme: &Theme| {
             let palette = theme.extended_palette();
@@ -97,7 +110,7 @@ impl Application for Postal {
         .center_x()
         .center_y();
 
-        column![header, example].spacing(10).padding(20).into()
+        column![main, footer].spacing(10).padding(10).into()
     }
 
     fn theme(&self) -> Theme {

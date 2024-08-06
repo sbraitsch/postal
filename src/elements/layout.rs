@@ -1,18 +1,19 @@
-use iced::{theme, widget::scrollable};
+use iced::{widget::scrollable, widget::Text};
+use pcap::Packet;
 
-use crate::{
-    column, container, horizontal_space, row, square, Alignment, Element, Length, Message, Theme,
-};
+use crate::{column, container, row, square, Alignment, Element, Length, Message};
+
+use super::{packet_list::PacketList, sidebar::Sidebar};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Layout {
     pub title: &'static str,
-    pub view: fn() -> Element<'static, Message>,
+    pub view: fn(&Vec<String>) -> Element<'static, Message>,
 }
 
 impl Layout {
-    pub fn view(&self) -> Element<Message> {
-        (self.view)()
+    pub fn view(&self, packets: &Vec<String>) -> Element<Message> {
+        (self.view)(packets)
     }
 }
 
@@ -25,45 +26,10 @@ impl Default for Layout {
     }
 }
 
-fn layout_view<'a>() -> Element<'a, Message> {
-    let header = container(
-        row![
-            square(40),
-            horizontal_space(),
-            "Header!",
-            horizontal_space(),
-            square(40),
-        ]
-        .padding(10)
-        .align_items(Alignment::Center),
-    )
-    .style(|theme: &Theme| {
-        let palette = theme.extended_palette();
+fn layout_view<'a>(packets: &Vec<String>) -> Element<'a, Message> {
+    let sidebar = Sidebar::default().view();
 
-        container::Appearance::default().with_border(palette.background.strong.color, 1)
-    });
+    let packet_list = PacketList {}.view(packets);
 
-    let sidebar = container(
-        column!["Sidebar!", square(50), square(50)]
-            .spacing(40)
-            .padding(10)
-            .width(200)
-            .align_items(Alignment::Center),
-    )
-    .style(theme::Container::Box)
-    .height(Length::Fill)
-    .center_y();
-
-    let content = container(
-        scrollable(
-            column!["Content!", square(400), square(200), square(400), "The end"]
-                .spacing(40)
-                .align_items(Alignment::Center)
-                .width(Length::Fill),
-        )
-        .height(Length::Fill),
-    )
-    .padding(10);
-
-    column![header, row![sidebar, content]].into()
+    row![sidebar, packet_list].into()
 }
