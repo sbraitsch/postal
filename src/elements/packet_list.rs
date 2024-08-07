@@ -1,5 +1,7 @@
-use crate::{container, container::Container, Alignment, Element, Length, Message};
-use iced::widget::{scrollable, Column};
+use iced::widget::{container, scrollable, Column, Container};
+use iced::{Alignment, Element, Length};
+
+use crate::{Message, SCROLLABLE_ID};
 
 use super::monospace_text::MonospaceText;
 
@@ -20,6 +22,8 @@ impl PacketList {
                     .align_items(Alignment::Start)
                     .width(Length::Fill),
             )
+            .id(SCROLLABLE_ID.clone())
+            .on_scroll(Message::Scrolled)
             .height(Length::Fill),
         )
         .width(Length::FillPortion(5))

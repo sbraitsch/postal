@@ -45,15 +45,13 @@ impl PacketSubscription {
 
                     // Check if it's an IPv4 packet
                     if eth_packet.get_ethertype() == pnet::packet::ethernet::EtherTypes::Ipv4 {
-                        tokio::time::sleep(Duration::from_secs(1)).await;
                         let ipv4_packet = Ipv4Packet::new(eth_packet.payload())
                             .expect("Failed to parse IPv4 packet");
-                        println!("Captured IPv4 packet: {:?}", ipv4_packet);
                         match ipv4_packet.get_next_level_protocol() {
                             IpNextHeaderProtocols::Tcp => {
                                 if let Some(tcp_packet) = TcpPacket::new(ipv4_packet.payload()) {
                                     let item = format!(
-                                        "IPv4 Packet, Port: {}, Source IP: {}, Destination IP: {}",
+                                        "TCP Packet @ Port: {}, Source IP: {}, Destination IP: {}",
                                         tcp_packet.get_destination(),
                                         ipv4_packet.get_source(),
                                         ipv4_packet.get_destination(),
@@ -64,7 +62,7 @@ impl PacketSubscription {
                             IpNextHeaderProtocols::Udp => {
                                 if let Some(udp_packet) = UdpPacket::new(ipv4_packet.payload()) {
                                     let item = format!(
-                                        "IPv4 Packet, Port: {}, Source IP: {}, Destination IP: {}",
+                                        "UDP Packet @ Port: {}, Source IP: {}, Destination IP: {}",
                                         udp_packet.get_destination(),
                                         ipv4_packet.get_source(),
                                         ipv4_packet.get_destination(),
@@ -100,11 +98,15 @@ impl Recipe for PacketSubscription {
         _input: iced_futures::subscription::EventStream,
     ) -> iced_futures::BoxStream<Self::Output> {
         Box::pin(stream::unfold(self.receiver.clone(), |r| async move {
+            tokio::time::sleep(Duration::from_millis(1000)).await;
             let mut rx = r.lock().await;
-            match rx.recv().await {
-                Some(s) => Some((Message::PacketReceived(s), r.clone())),
-                None => None,
-            }
+            let mut buffer = Vec::with_capacity(rx.len());
+            let limit = buffer.capacity();
+            let _ = rx.recv_many(&mut buffer, limit).await;
+            return Some((
+                Message::PacketsReceived(buffer.drain(..).collect()),
+                r.clone(),
+            ));
         }))
     }
 }

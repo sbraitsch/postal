@@ -2091,6 +2091,7 @@ dependencies = [
  "async-stream",
  "iced",
  "iced_futures",
+ "once_cell",
  "pnet",
  "tokio",
  "tokio-macros",

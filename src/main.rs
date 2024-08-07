@@ -4,13 +4,15 @@ mod elements;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use data::filter::Filter;
 use data::packet_subscription::PacketSubscription;
+use data::postal_options::PostalOptions;
 use elements::monospace_text::monospace;
+use elements::monospace_text::MonospaceText;
 use elements::packet_list::PacketList;
 use elements::sidebar::Sidebar;
 use elements::styled_button::ButtonStyleSheet;
 use iced::executor;
+use iced::widget::scrollable;
 use iced::widget::vertical_rule;
 use iced::widget::Button;
 use iced::widget::{button, column, container, horizontal_space, pick_list, row};
@@ -22,6 +24,10 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
+use once_cell::sync::Lazy;
+
+static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
+
 #[tokio::main]
 pub async fn main() -> iced::Result {
     Postal::run(Settings::default())
@@ -32,7 +38,7 @@ struct Postal {
     sniff: bool,
     theme: Theme,
     packets: Vec<String>,
-    filter: HashMap<Filter, bool>,
+    options: HashMap<PostalOptions, bool>,
     sender: Arc<Mutex<Sender<String>>>,
     receiver: Arc<Mutex<Receiver<String>>>,
     task_handle: Option<JoinHandle<()>>,
@@ -42,9 +48,10 @@ struct Postal {
 #[derive(Debug, Clone)]
 pub enum Message {
     ThemeSelected(Theme),
-    PacketReceived(String),
+    PacketsReceived(Vec<String>),
     Sniffing(bool),
-    ApplyFilter(Filter, bool),
+    OptionChanged(PostalOptions, bool),
+    Scrolled(scrollable::Viewport),
 }
 
 impl Application for Postal {
@@ -54,14 +61,13 @@ impl Application for Postal {
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, Command<Message>) {
-        let (tx, rx) = mpsc::channel::<String>(100);
-
+        let (tx, rx) = mpsc::channel::<String>(1000);
         (
             Self {
                 sniff: false,
                 theme: Theme::GruvboxLight,
                 packets: vec![],
-                filter: Filter::as_map(),
+                options: PostalOptions::as_map(),
                 sender: Arc::new(Mutex::new(tx)),
                 receiver: Arc::new(Mutex::new(rx)),
                 task_handle: None,
@@ -80,7 +86,15 @@ impl Application for Postal {
             Message::ThemeSelected(theme) => {
                 self.theme = theme;
             }
-            Message::PacketReceived(p) => self.packets.push(p),
+            Message::PacketsReceived(mut packets) => {
+                self.packets.append(&mut packets);
+                if self.options[&PostalOptions::Autoscroll] {
+                    return scrollable::snap_to(
+                        SCROLLABLE_ID.clone(),
+                        scrollable::RelativeOffset::END,
+                    );
+                }
+            }
             Message::Sniffing(sniff) => {
                 self.sniff = sniff;
                 if sniff {
@@ -95,12 +109,13 @@ impl Application for Postal {
                     self.cancellation_token.cancel();
                 }
             }
-            Message::ApplyFilter(f, b) => {
-                self.filter
+            Message::OptionChanged(f, b) => {
+                self.options
                     .entry(f)
                     .and_modify(|toggled| *toggled = b)
                     .or_default();
             }
+            Message::Scrolled(_) => {}
         }
 
         Command::none()
@@ -127,12 +142,14 @@ impl Application for Postal {
         let footer = row![
             pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected),
             horizontal_space(),
+            MonospaceText::new(format!("Captured {} Packets", self.packets.len())).size(20),
+            horizontal_space(),
             sniff_btn,
         ]
         .spacing(20)
         .align_items(Alignment::Center);
 
-        let sidebar = Sidebar::view(&self.filter);
+        let sidebar = Sidebar::view(&self.options);
         let packet_list = PacketList {}.view(&self.packets);
         let main = container(row![sidebar, vertical_rule(1), packet_list])
             .style(|theme: &Theme| {
