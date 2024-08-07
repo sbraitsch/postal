@@ -5,9 +5,9 @@ pub enum PostalOptions {
     Autoscroll,
     Tcp,
     Udp,
-    Icmp,
-    Http,
-    Https,
+    // Icmp,
+    // Http,
+    // Https,
 }
 
 impl PostalOptions {
@@ -16,9 +16,9 @@ impl PostalOptions {
         map.insert(PostalOptions::Autoscroll, false);
         map.insert(PostalOptions::Tcp, true);
         map.insert(PostalOptions::Udp, true);
-        map.insert(PostalOptions::Icmp, false);
-        map.insert(PostalOptions::Http, false);
-        map.insert(PostalOptions::Https, false);
+        // map.insert(PostalOptions::Icmp, false);
+        // map.insert(PostalOptions::Http, false);
+        // map.insert(PostalOptions::Https, false);
         map
     }
 }
@@ -29,9 +29,9 @@ impl ToString for PostalOptions {
             PostalOptions::Autoscroll => "Autoscroll".to_string(),
             PostalOptions::Tcp => "TCP".to_string(),
             PostalOptions::Udp => "UDP".to_string(),
-            PostalOptions::Icmp => "ICMP".to_string(),
-            PostalOptions::Http => "HTTP".to_string(),
-            PostalOptions::Https => "HTTPS".to_string(),
+            // PostalOptions::Icmp => "ICMP".to_string(),
+            // PostalOptions::Http => "HTTP".to_string(),
+            // PostalOptions::Https => "HTTPS".to_string(),
         }
     }
 }

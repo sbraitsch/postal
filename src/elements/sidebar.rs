@@ -12,7 +12,7 @@ pub struct Sidebar;
 impl Sidebar {
     pub fn view(filters: &HashMap<PostalOptions, bool>) -> Element<'static, Message> {
         let header = container(
-            monospace("Filter (NYI)")
+            monospace("Options")
                 .size(20)
                 .horizontal_alignment(iced::alignment::Horizontal::Center),
         )

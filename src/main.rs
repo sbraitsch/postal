@@ -65,7 +65,7 @@ impl Application for Postal {
         (
             Self {
                 sniff: false,
-                theme: Theme::GruvboxLight,
+                theme: Theme::TokyoNight,
                 packets: vec![],
                 options: PostalOptions::as_map(),
                 sender: Arc::new(Mutex::new(tx)),
@@ -131,18 +131,18 @@ impl Application for Postal {
 
     fn view(&self) -> Element<Message> {
         let sniff_btn: Button<_> = if !self.sniff {
-            button(monospace("Start Sniffing").size(20))
+            button(monospace("Capture    ").size(20))
                 .style(ButtonStyleSheet::new())
                 .on_press(Message::Sniffing(!self.sniff))
         } else {
-            button(monospace("Stop Sniffing").size(20))
+            button(monospace("Capturing..").size(20))
                 .style(ButtonStyleSheet::new())
                 .on_press(Message::Sniffing(!self.sniff))
         };
         let footer = row![
             pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected),
             horizontal_space(),
-            MonospaceText::new(format!("Captured {} Packets", self.packets.len())).size(20),
+            MonospaceText::new(format!("Captured {} Packets", self.packets.len())).size(16),
             horizontal_space(),
             sniff_btn,
         ]
