@@ -1,7 +1,4 @@
-use iced::{widget::scrollable, widget::Text};
-use pcap::Packet;
-
-use crate::{column, container, row, square, Alignment, Element, Length, Message};
+use crate::{row, Element, Message};
 
 use super::{packet_list::PacketList, sidebar::Sidebar};
 

@@ -1,4 +1,4 @@
-use pcap::Packet;
+use iced::futures::TryStream;
 use std::{fmt, net::Ipv4Addr};
 
 use super::protocol::Protocol;
@@ -14,7 +14,7 @@ pub struct PostalPacket {
     payload: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct Header {
     timestamp: usize,
     cap_size: usize,
@@ -22,33 +22,16 @@ struct Header {
 }
 
 impl PostalPacket {
-    pub fn from_packet(packet: Packet) -> Self {
-        let source_ip;
-        let destination_ip;
-        if let [a, b, c, d] = packet.data[12..=15] {
-            // ipheader bytes 12-15
-            source_ip = Ipv4Addr::new(a, b, c, d);
-        } else {
-            panic!("Error parsing Source IP.")
-        };
-        if let [a, b, c, d] = packet.data[16..=19] {
-            // ipheader bytes 16-19
-            destination_ip = Ipv4Addr::new(a, b, c, d);
-        } else {
-            panic!("Error parsing Destination IP.")
-        };
-        Self {
+    pub fn new(packet: String) -> Self {
+        PostalPacket {
             header: Header {
-                timestamp: packet.header.ts.tv_sec as usize,
-                cap_size: packet.header.caplen as usize,
-                pack_size: packet.header.len as usize,
+                ..Default::default()
             },
-            //data: packet.data.into_iter().copied().collect(),
-            protocol: Protocol::from_u8(packet.data[23]), // eth header 14 byte, protocol in ipheader 9th byte -> 23
-            port: (packet.data[36] as u16) << 8 | packet.data[37] as u16,
-            source_ip,
-            destination_ip,
-            payload: String::new(), //String::from_utf8(packet.data[54..].to_vec()).unwrap(),
+            protocol: Protocol::Tcp,
+            port: Default::default(),
+            source_ip: Ipv4Addr::new(1, 2, 3, 4),
+            destination_ip: Ipv4Addr::new(1, 2, 3, 4),
+            payload: packet,
         }
     }
 }
