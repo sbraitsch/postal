@@ -1,23 +1,20 @@
 mod data;
 mod elements;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
+use data::filter::Filter;
 use data::packet_subscription::PacketSubscription;
-use data::postal_packet::PostalPacket;
-use elements::layout::Layout;
+use elements::monospace_text::monospace;
+use elements::packet_list::PacketList;
+use elements::sidebar::Sidebar;
+use elements::styled_button::ButtonStyleSheet;
 use iced::executor;
-use iced::keyboard;
-use iced::keyboard::key;
-use iced::mouse;
+use iced::widget::vertical_rule;
 use iced::widget::Button;
-use iced::widget::{
-    button, canvas, checkbox, column, container, horizontal_space, pick_list, row, text,
-};
-use iced::{
-    color, Alignment, Application, Command, Element, Font, Length, Point, Rectangle, Renderer,
-    Settings, Subscription, Theme,
-};
+use iced::widget::{button, column, container, horizontal_space, pick_list, row};
+use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
@@ -32,11 +29,10 @@ pub async fn main() -> iced::Result {
 
 #[derive(Debug)]
 struct Postal {
-    layout: Layout,
-    explain: bool,
     sniff: bool,
     theme: Theme,
     packets: Vec<String>,
+    filter: HashMap<Filter, bool>,
     sender: Arc<Mutex<Sender<String>>>,
     receiver: Arc<Mutex<Receiver<String>>>,
     task_handle: Option<JoinHandle<()>>,
@@ -45,10 +41,10 @@ struct Postal {
 
 #[derive(Debug, Clone)]
 pub enum Message {
-    ExplainToggled(bool),
     ThemeSelected(Theme),
-    PacketReceived(PostalPacket),
+    PacketReceived(String),
     Sniffing(bool),
+    ApplyFilter(Filter, bool),
 }
 
 impl Application for Postal {
@@ -62,11 +58,10 @@ impl Application for Postal {
 
         (
             Self {
-                layout: Layout::default(),
-                explain: false,
                 sniff: false,
                 theme: Theme::GruvboxLight,
                 packets: vec![],
+                filter: Filter::as_map(),
                 sender: Arc::new(Mutex::new(tx)),
                 receiver: Arc::new(Mutex::new(rx)),
                 task_handle: None,
@@ -77,18 +72,15 @@ impl Application for Postal {
     }
 
     fn title(&self) -> String {
-        self.layout.title.to_string()
+        String::from("Postal")
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Message> {
         match message {
-            Message::ExplainToggled(explain) => {
-                self.explain = explain;
-            }
             Message::ThemeSelected(theme) => {
                 self.theme = theme;
             }
-            Message::PacketReceived(p) => self.packets.push(p.to_string()),
+            Message::PacketReceived(p) => self.packets.push(p),
             Message::Sniffing(sniff) => {
                 self.sniff = sniff;
                 if sniff {
@@ -103,6 +95,12 @@ impl Application for Postal {
                     self.cancellation_token.cancel();
                 }
             }
+            Message::ApplyFilter(f, b) => {
+                self.filter
+                    .entry(f)
+                    .and_modify(|toggled| *toggled = b)
+                    .or_default();
+            }
         }
 
         Command::none()
@@ -114,46 +112,38 @@ impl Application for Postal {
         } else {
             Subscription::none()
         }
-        // use keyboard::key;
-        // keyboard::on_key_release(|key, _modifiers| match key {
-        //     keyboard::Key::Named(key::Named::ArrowLeft) => Some(Message::ExplainToggled(false)),
-        //     keyboard::Key::Named(key::Named::ArrowRight) => Some(Message::ExplainToggled(true)),
-        //     _ => None,
-        // })
-        // Subscription::batch(vec![a, b])
     }
 
     fn view(&self) -> Element<Message> {
         let sniff_btn: Button<_> = if !self.sniff {
-            button("Sniff").on_press(Message::Sniffing(!self.sniff))
+            button(monospace("Start Sniffing").size(20))
+                .style(ButtonStyleSheet::new())
+                .on_press(Message::Sniffing(!self.sniff))
         } else {
-            button("Stop sniffing").on_press(Message::Sniffing(!self.sniff))
+            button(monospace("Stop Sniffing").size(20))
+                .style(ButtonStyleSheet::new())
+                .on_press(Message::Sniffing(!self.sniff))
         };
         let footer = row![
-            text(self.layout.title).size(20).font(Font::MONOSPACE),
+            pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected),
             horizontal_space(),
             sniff_btn,
-            checkbox("Explain", self.explain).on_toggle(Message::ExplainToggled),
-            pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected),
         ]
         .spacing(20)
         .align_items(Alignment::Center);
 
-        let main = container(if self.explain {
-            self.layout.view(&self.packets).explain(color!(0x0000ff))
-        } else {
-            self.layout.view(&self.packets)
-        })
-        .style(|theme: &Theme| {
-            let palette = theme.extended_palette();
-
-            container::Appearance::default().with_border(palette.background.strong.color, 4.0)
-        })
-        .padding(4)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .center_x()
-        .center_y();
+        let sidebar = Sidebar::view(&self.filter);
+        let packet_list = PacketList {}.view(&self.packets);
+        let main = container(row![sidebar, vertical_rule(1), packet_list])
+            .style(|theme: &Theme| {
+                let palette = theme.extended_palette();
+                container::Appearance::default().with_border(palette.background.strong.color, 2.0)
+            })
+            .padding(4)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .center_y();
 
         column![main, footer].spacing(10).padding(10).into()
     }
@@ -161,35 +151,4 @@ impl Application for Postal {
     fn theme(&self) -> Theme {
         self.theme.clone()
     }
-}
-
-fn square<'a>(size: impl Into<Length> + Copy) -> Element<'a, Message> {
-    struct Square;
-
-    impl canvas::Program<Message> for Square {
-        type State = ();
-
-        fn draw(
-            &self,
-            _state: &Self::State,
-            renderer: &Renderer,
-            theme: &Theme,
-            bounds: Rectangle,
-            _cursor: mouse::Cursor,
-        ) -> Vec<canvas::Geometry> {
-            let mut frame = canvas::Frame::new(renderer, bounds.size());
-
-            let palette = theme.extended_palette();
-
-            frame.fill_rectangle(
-                Point::ORIGIN,
-                bounds.size(),
-                palette.background.strong.color,
-            );
-
-            vec![frame.into_geometry()]
-        }
-    }
-
-    canvas(Square).width(size).height(size).into()
 }

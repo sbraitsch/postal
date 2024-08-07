@@ -1,5 +1,7 @@
 use crate::{container, container::Container, Alignment, Element, Length, Message};
-use iced::widget::{scrollable, Column, Text};
+use iced::widget::{scrollable, Column};
+
+use super::monospace_text::MonospaceText;
 
 pub struct PacketList {}
 
@@ -8,19 +10,19 @@ impl PacketList {
         let elem = packets
             .iter()
             .cloned()
-            .map(|s| Text::new(s).into())
+            .map(|s| MonospaceText::new(s).into())
             .collect::<Vec<Element<Message>>>();
 
         container(
             scrollable(
                 Column::with_children(elem)
-                    .spacing(20)
+                    .spacing(10)
                     .align_items(Alignment::Start)
                     .width(Length::Fill),
             )
             .height(Length::Fill),
         )
-        .width(Length::FillPortion(3))
+        .width(Length::FillPortion(5))
         .padding(10)
     }
 }
