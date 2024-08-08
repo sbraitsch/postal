@@ -10,12 +10,12 @@ use super::monospace_text::{monospace, MonospaceText};
 
 pub struct Sidebar;
 
-impl Sidebar {
+impl<'a> Sidebar {
     pub fn view(
         options: &HashMap<PostalOption, bool>,
-        filters: &HashMap<TransportPacket, bool>,
+        filters: &'a HashMap<TransportPacket, bool>,
         selected_interface: String,
-    ) -> Element<'static, Message> {
+    ) -> Element<'a, Message> {
         let header = container(
             monospace("Options")
                 .size(20)
@@ -39,9 +39,9 @@ impl Sidebar {
             })
             .collect::<Vec<_>>();
 
-        let filter_rows = filters.clone().into_iter().map(|(filter, toggled)| {
+        let filter_rows = filters.into_iter().map(|(filter, toggled)| {
             let filt = filter.clone();
-            let cb = checkbox("", toggled)
+            let cb = checkbox("", *toggled)
                 .font(Font::MONOSPACE)
                 .on_toggle(move |t| Message::FilterChanged(filt.clone(), t));
             row![
