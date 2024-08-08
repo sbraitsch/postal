@@ -6,7 +6,7 @@ use crate::{column, container, row, Alignment, Element, Length, Message, NETWORK
 use iced::widget::{checkbox, horizontal_rule, horizontal_space, pick_list, Column};
 use iced::Font;
 
-use super::monospace_text::{monospace, MonospaceText};
+use super::monospace_text::{monospace, monospace_bold};
 
 pub struct Sidebar;
 
@@ -16,55 +16,63 @@ impl<'a> Sidebar {
         filters: &'a HashMap<TransportPacket, bool>,
         selected_interface: String,
     ) -> Element<'a, Message> {
-        let header = container(
-            monospace("Options")
+        let setting_header = container(
+            monospace_bold("Settings")
                 .size(20)
                 .horizontal_alignment(iced::alignment::Horizontal::Center),
         )
-        .width(Length::Fill);
+        .width(Length::Fill)
+        .padding(10);
 
-        let mut opt_rows = options
+        let filter_header = container(
+            monospace_bold("Protocols")
+                .size(20)
+                .horizontal_alignment(iced::alignment::Horizontal::Center),
+        )
+        .width(Length::Fill)
+        .padding(10);
+
+        let opt_rows = options
             .iter()
             .map(|(&option, &toggled)| {
                 let opt = option.clone();
                 let cb = checkbox("", toggled)
                     .font(Font::MONOSPACE)
                     .on_toggle(move |t| Message::OptionChanged(opt.clone(), t));
-                row![
-                    MonospaceText::new(option.to_string()),
-                    horizontal_space(),
-                    cb
-                ]
-                .into()
+                row![monospace(option.to_string()), horizontal_space(), cb].into()
             })
             .collect::<Vec<_>>();
 
-        let filter_rows = filters.into_iter().map(|(filter, toggled)| {
-            let filt = filter.clone();
-            let cb = checkbox("", *toggled)
-                .font(Font::MONOSPACE)
-                .on_toggle(move |t| Message::FilterChanged(filt.clone(), t));
-            row![
-                MonospaceText::new(filter.to_string()),
-                horizontal_space(),
-                cb
-            ]
-            .into()
-        });
+        let filter_rows = filters
+            .into_iter()
+            .map(|(filter, toggled)| {
+                let filt = filter.clone();
+                let cb = checkbox("", *toggled)
+                    .font(Font::MONOSPACE)
+                    .on_toggle(move |t| Message::FilterChanged(filt.clone(), t));
+                row![monospace(filter.to_string()), horizontal_space(), cb].into()
+            })
+            .collect::<Vec<_>>();
 
-        opt_rows.extend(filter_rows);
-
-        let settings = container(
+        let settings_container = container(
             Column::with_children(opt_rows)
                 .spacing(10)
                 .padding(10)
                 .width(Length::Fill)
-                .height(Length::Fill)
+                .align_items(Alignment::Start),
+        )
+        .width(Length::FillPortion(1))
+        .center_y();
+
+        let filters_container = container(
+            Column::with_children(filter_rows)
+                .spacing(10)
+                .padding(10)
+                .width(Length::Fill)
                 .align_items(Alignment::Start),
         )
         .height(Length::Fill)
-        .width(Length::FillPortion(1))
-        .center_y();
+        .width(Length::FillPortion(1));
 
         let interface_picker = pick_list(
             NETWORK_INTERFACES
@@ -77,6 +85,17 @@ impl<'a> Sidebar {
         .font(Font::MONOSPACE)
         .width(Length::Fill);
 
-        column![header, horizontal_rule(5), settings, interface_picker].into()
+        column![
+            setting_header,
+            horizontal_rule(1),
+            settings_container,
+            horizontal_rule(1),
+            filter_header,
+            horizontal_rule(1),
+            filters_container,
+            horizontal_rule(1),
+            interface_picker
+        ]
+        .into()
     }
 }

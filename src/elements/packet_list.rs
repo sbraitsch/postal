@@ -7,7 +7,7 @@ use pnet::ipnetwork::IpNetwork;
 use crate::data::parsed_packet::{ParsedPacket, TransportPacket};
 use crate::{Message, SCROLLABLE_ID};
 
-use super::monospace_text::monospace;
+use super::monospace_text::monospace_bold;
 
 pub struct PacketList {}
 
@@ -19,19 +19,24 @@ impl PacketList {
         filter: &'a HashMap<TransportPacket, bool>,
     ) -> Element<'a, Message> {
         let header = row![
-            monospace("Direction")
+            monospace_bold("Direction")
                 .size(16)
                 .width(Length::FillPortion(1)),
-            monospace("Protocol").size(16).width(Length::FillPortion(1)),
-            monospace("Port").size(16).width(Length::FillPortion(1)),
-            monospace("Source IP")
+            monospace_bold("Protocol")
+                .size(16)
+                .width(Length::FillPortion(1)),
+            monospace_bold("Port")
+                .size(16)
+                .width(Length::FillPortion(1)),
+            monospace_bold("Source IP")
                 .size(16)
                 .width(Length::FillPortion(2)),
-            monospace("Destination IP")
+            monospace_bold("Destination IP")
                 .size(16)
                 .width(Length::FillPortion(2)),
         ]
-        .width(Length::Fill);
+        .width(Length::Fill)
+        .padding(10);
 
         let elem = packets
             .iter()

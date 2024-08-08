@@ -10,7 +10,7 @@ use data::parsed_packet::ParsedPacket;
 use data::parsed_packet::TransportPacket;
 use data::postal_option::PostalOption;
 use elements::monospace_text::monospace;
-use elements::monospace_text::MonospaceText;
+use elements::monospace_text::monospace_bold;
 use elements::packet_list::PacketList;
 use elements::sidebar::Sidebar;
 use elements::styled_button::ButtonStyleSheet;
@@ -80,7 +80,7 @@ impl Application for Postal {
         (
             Self {
                 sniff: false,
-                theme: Theme::TokyoNight,
+                theme: Theme::GruvboxDark,
                 packets: vec![],
                 options: PostalOption::as_map(),
                 filter: TransportPacket::as_map(),
@@ -163,18 +163,18 @@ impl Application for Postal {
 
     fn view(&self) -> Element<Message> {
         let sniff_btn: Button<_> = if !self.sniff {
-            button(monospace("Capture    ").size(20))
+            button(monospace_bold("Capture    ").size(20))
                 .style(ButtonStyleSheet::new())
                 .on_press(Message::Sniffing(!self.sniff))
         } else {
-            button(monospace("Capturing..").size(20))
+            button(monospace_bold("Capturing..").size(20))
                 .style(ButtonStyleSheet::new())
                 .on_press(Message::Sniffing(!self.sniff))
         };
         let footer = row![
             pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected).font(Font::MONOSPACE),
             horizontal_space(),
-            MonospaceText::new(format!("Captured {} Packets", self.packets.len())).size(16),
+            monospace(format!("Captured {} Packets", self.packets.len())).size(16),
             horizontal_space(),
             sniff_btn,
         ]
@@ -191,7 +191,7 @@ impl Application for Postal {
         let main = container(row![sidebar, vertical_rule(1), packet_list])
             .style(|theme: &Theme| {
                 let palette = theme.extended_palette();
-                container::Appearance::default().with_border(palette.background.strong.color, 2.0)
+                container::Appearance::default().with_border(palette.background.strong.color, 1.0)
             })
             .padding(4)
             .width(Length::Fill)
