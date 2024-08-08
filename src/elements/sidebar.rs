@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
-use crate::data::postal_options::PostalOptions;
-use crate::{column, container, row, Alignment, Element, Length, Message};
-use iced::widget::{checkbox, horizontal_rule, horizontal_space, Column};
+use crate::data::parsed_packet::TransportPacket;
+use crate::data::postal_option::PostalOption;
+use crate::{column, container, row, Alignment, Element, Length, Message, NETWORK_INTERFACES};
+use iced::widget::{checkbox, horizontal_rule, horizontal_space, pick_list, Column};
 use iced::Font;
 
 use super::monospace_text::{monospace, MonospaceText};
@@ -10,7 +11,11 @@ use super::monospace_text::{monospace, MonospaceText};
 pub struct Sidebar;
 
 impl Sidebar {
-    pub fn view(filters: &HashMap<PostalOptions, bool>) -> Element<'static, Message> {
+    pub fn view(
+        options: &HashMap<PostalOption, bool>,
+        filters: &HashMap<TransportPacket, bool>,
+        selected_interface: String,
+    ) -> Element<'static, Message> {
         let header = container(
             monospace("Options")
                 .size(20)
@@ -18,24 +23,39 @@ impl Sidebar {
         )
         .width(Length::Fill);
 
-        let elem = filters
+        let mut opt_rows = options
             .iter()
-            .map(|(&filter, &toggled)| {
-                let f = filter.clone();
+            .map(|(&option, &toggled)| {
+                let opt = option.clone();
                 let cb = checkbox("", toggled)
                     .font(Font::MONOSPACE)
-                    .on_toggle(move |t| Message::OptionChanged(f, t));
-                container(row![
-                    MonospaceText::new(filter.to_string()),
+                    .on_toggle(move |t| Message::OptionChanged(opt.clone(), t));
+                row![
+                    MonospaceText::new(option.to_string()),
                     horizontal_space(),
                     cb
-                ])
+                ]
                 .into()
             })
             .collect::<Vec<_>>();
 
-        let filters = container(
-            Column::with_children(elem)
+        let filter_rows = filters.clone().into_iter().map(|(filter, toggled)| {
+            let filt = filter.clone();
+            let cb = checkbox("", toggled)
+                .font(Font::MONOSPACE)
+                .on_toggle(move |t| Message::FilterChanged(filt.clone(), t));
+            row![
+                MonospaceText::new(filter.to_string()),
+                horizontal_space(),
+                cb
+            ]
+            .into()
+        });
+
+        opt_rows.extend(filter_rows);
+
+        let settings = container(
+            Column::with_children(opt_rows)
                 .spacing(10)
                 .padding(10)
                 .width(Length::Fill)
@@ -46,6 +66,17 @@ impl Sidebar {
         .width(Length::FillPortion(1))
         .center_y();
 
-        column![header, horizontal_rule(5), filters].into()
+        let interface_picker = pick_list(
+            NETWORK_INTERFACES
+                .iter()
+                .map(|int| int.name.to_string())
+                .collect::<Vec<String>>(),
+            Some(selected_interface),
+            Message::NetworkInterfaceSelected,
+        )
+        .font(Font::MONOSPACE)
+        .width(Length::Fill);
+
+        column![header, horizontal_rule(5), settings, interface_picker].into()
     }
 }

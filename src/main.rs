@@ -3,9 +3,12 @@ mod elements;
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::thread;
 
 use data::packet_subscription::PacketSubscription;
-use data::postal_options::PostalOptions;
+use data::parsed_packet::ParsedPacket;
+use data::parsed_packet::TransportPacket;
+use data::postal_option::PostalOption;
 use elements::monospace_text::monospace;
 use elements::monospace_text::MonospaceText;
 use elements::packet_list::PacketList;
@@ -16,17 +19,26 @@ use iced::widget::scrollable;
 use iced::widget::vertical_rule;
 use iced::widget::Button;
 use iced::widget::{button, column, container, horizontal_space, pick_list, row};
+use iced::Font;
 use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
+use pnet::datalink;
+use pnet::datalink::NetworkInterface;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 use once_cell::sync::Lazy;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
+static NETWORK_INTERFACES: Lazy<Vec<NetworkInterface>> = Lazy::new(|| {
+    datalink::interfaces()
+        .iter()
+        .cloned()
+        .filter(|e| e.is_up() && !e.is_loopback() && !e.ips.is_empty())
+        .collect()
+});
 
 #[tokio::main]
 pub async fn main() -> iced::Result {
@@ -37,21 +49,24 @@ pub async fn main() -> iced::Result {
 struct Postal {
     sniff: bool,
     theme: Theme,
-    packets: Vec<String>,
-    options: HashMap<PostalOptions, bool>,
-    sender: Arc<Mutex<Sender<String>>>,
-    receiver: Arc<Mutex<Receiver<String>>>,
-    task_handle: Option<JoinHandle<()>>,
+    packets: Vec<ParsedPacket>,
+    options: HashMap<PostalOption, bool>,
+    filter: HashMap<TransportPacket, bool>,
+    sender: Arc<Mutex<Sender<ParsedPacket>>>,
+    receiver: Arc<Mutex<Receiver<ParsedPacket>>>,
     cancellation_token: CancellationToken,
+    network_interface: NetworkInterface,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     ThemeSelected(Theme),
-    PacketsReceived(Vec<String>),
+    PacketsReceived(Vec<ParsedPacket>),
     Sniffing(bool),
-    OptionChanged(PostalOptions, bool),
+    OptionChanged(PostalOption, bool),
+    FilterChanged(TransportPacket, bool),
     Scrolled(scrollable::Viewport),
+    NetworkInterfaceSelected(String),
 }
 
 impl Application for Postal {
@@ -61,17 +76,22 @@ impl Application for Postal {
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, Command<Message>) {
-        let (tx, rx) = mpsc::channel::<String>(1000);
+        let (tx, rx) = mpsc::channel::<ParsedPacket>(1000);
         (
             Self {
                 sniff: false,
                 theme: Theme::TokyoNight,
                 packets: vec![],
-                options: PostalOptions::as_map(),
+                options: PostalOption::as_map(),
+                filter: TransportPacket::as_map(),
                 sender: Arc::new(Mutex::new(tx)),
                 receiver: Arc::new(Mutex::new(rx)),
-                task_handle: None,
                 cancellation_token: CancellationToken::new(),
+                network_interface: NETWORK_INTERFACES
+                    .iter()
+                    .find(|i| i.ips.iter().any(|ip| ip.is_ipv4() && !i.is_loopback()))
+                    .expect("No default network interface found.")
+                    .clone(),
             },
             Command::none(),
         )
@@ -88,7 +108,7 @@ impl Application for Postal {
             }
             Message::PacketsReceived(mut packets) => {
                 self.packets.append(&mut packets);
-                if self.options[&PostalOptions::Autoscroll] {
+                if self.options[&PostalOption::Autoscroll] {
                     return scrollable::snap_to(
                         SCROLLABLE_ID.clone(),
                         scrollable::RelativeOffset::END,
@@ -102,20 +122,32 @@ impl Application for Postal {
                     let tx = self.sender.clone();
                     let token = CancellationToken::new();
                     self.cancellation_token = token.clone();
-                    self.task_handle = Some(tokio::spawn(async move {
-                        PacketSubscription::sniff(tx, token).await
-                    }));
+                    let ninf = self.network_interface.clone();
+                    thread::spawn(move || PacketSubscription::sniff(tx, ninf, token));
                 } else {
                     self.cancellation_token.cancel();
                 }
             }
-            Message::OptionChanged(f, b) => {
+            Message::OptionChanged(opt, b) => {
                 self.options
-                    .entry(f)
+                    .entry(opt)
                     .and_modify(|toggled| *toggled = b)
                     .or_default();
             }
             Message::Scrolled(_) => {}
+            Message::NetworkInterfaceSelected(n) => {
+                self.network_interface = NETWORK_INTERFACES
+                    .iter()
+                    .find(|i| i.name == n)
+                    .expect("Network Interface not recognized")
+                    .clone()
+            }
+            Message::FilterChanged(f, b) => {
+                self.filter
+                    .entry(f)
+                    .and_modify(|toggled| *toggled = b)
+                    .or_default();
+            }
         }
 
         Command::none()
@@ -140,7 +172,7 @@ impl Application for Postal {
                 .on_press(Message::Sniffing(!self.sniff))
         };
         let footer = row![
-            pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected),
+            pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected).font(Font::MONOSPACE),
             horizontal_space(),
             MonospaceText::new(format!("Captured {} Packets", self.packets.len())).size(16),
             horizontal_space(),
@@ -149,8 +181,13 @@ impl Application for Postal {
         .spacing(20)
         .align_items(Alignment::Center);
 
-        let sidebar = Sidebar::view(&self.options);
-        let packet_list = PacketList {}.view(&self.packets);
+        let sidebar = Sidebar::view(
+            &self.options,
+            &self.filter,
+            self.network_interface.name.clone(),
+        );
+        let packet_list =
+            PacketList {}.view(&self.packets, &self.network_interface.ips, &self.filter);
         let main = container(row![sidebar, vertical_rule(1), packet_list])
             .style(|theme: &Theme| {
                 let palette = theme.extended_palette();

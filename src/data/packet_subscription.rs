@@ -2,13 +2,7 @@ use std::sync::Arc;
 
 use iced::futures::stream;
 use iced_futures::subscription::Recipe;
-use pnet::{
-    datalink::{self, Channel::Ethernet, Config},
-    packet::{
-        ethernet::EthernetPacket, ip::IpNextHeaderProtocols, ipv4::Ipv4Packet, tcp::TcpPacket,
-        udp::UdpPacket, Packet,
-    },
-};
+use pnet::datalink::{self, Channel::Ethernet, Config, NetworkInterface};
 use tokio::{
     sync::{
         mpsc::{Receiver, Sender},
@@ -18,70 +12,38 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
-use crate::Message;
+use crate::{data::parsed_packet::ParsedPacket, Message};
 
 #[derive(Debug)]
 pub struct PacketSubscription {
-    pub receiver: Arc<Mutex<Receiver<String>>>,
+    pub receiver: Arc<Mutex<Receiver<ParsedPacket>>>,
 }
 
 impl PacketSubscription {
-    pub fn new(rx: Arc<Mutex<Receiver<String>>>) -> Self {
+    pub fn new(rx: Arc<Mutex<Receiver<ParsedPacket>>>) -> Self {
         PacketSubscription { receiver: rx }
     }
 
-    pub async fn sniff(tx: Arc<Mutex<Sender<String>>>, token: CancellationToken) {
-        let sender = tx.lock().await;
-        let interface = datalink::interfaces()
-            .into_iter()
-            .find(|iface| iface.name == "en0")
-            .expect("Interface not found");
+    pub fn sniff(
+        tx: Arc<Mutex<Sender<ParsedPacket>>>,
+        interface: NetworkInterface,
+        token: CancellationToken,
+    ) {
+        let sender = tx.blocking_lock();
 
         if let Ok(Ethernet(_, mut rx)) = datalink::channel(&interface, Config::default()) {
             while !token.is_cancelled() {
                 if let Ok(packet) = rx.next() {
-                    let eth_packet =
-                        EthernetPacket::new(packet).expect("Failed to parse Ethernet packet");
-
-                    // Check if it's an IPv4 packet
-                    if eth_packet.get_ethertype() == pnet::packet::ethernet::EtherTypes::Ipv4 {
-                        let ipv4_packet = Ipv4Packet::new(eth_packet.payload())
-                            .expect("Failed to parse IPv4 packet");
-                        match ipv4_packet.get_next_level_protocol() {
-                            IpNextHeaderProtocols::Tcp => {
-                                if let Some(tcp_packet) = TcpPacket::new(ipv4_packet.payload()) {
-                                    let item = format!(
-                                        "TCP Packet @ Port: {}, Source IP: {}, Destination IP: {}",
-                                        tcp_packet.get_destination(),
-                                        ipv4_packet.get_source(),
-                                        ipv4_packet.get_destination(),
-                                    );
-                                    let _ = sender.send(item).await;
-                                }
-                            }
-                            IpNextHeaderProtocols::Udp => {
-                                if let Some(udp_packet) = UdpPacket::new(ipv4_packet.payload()) {
-                                    let item = format!(
-                                        "UDP Packet @ Port: {}, Source IP: {}, Destination IP: {}",
-                                        udp_packet.get_destination(),
-                                        ipv4_packet.get_source(),
-                                        ipv4_packet.get_destination(),
-                                    );
-                                    let _ = sender.send(item).await;
-                                }
-                            }
-                            _ => {
-                                println!(
-                                    "Other protocol: {}",
-                                    ipv4_packet.get_next_level_protocol()
-                                )
-                            }
+                    match ParsedPacket::parse(packet) {
+                        Some(p) => {
+                            let _ = sender.blocking_send(p);
                         }
+                        None => {}
                     }
                 }
             }
+            println!("Stopped sniffing task.")
         }
-        println!("Stopped sniffing task.")
     }
 }
 
@@ -98,15 +60,12 @@ impl Recipe for PacketSubscription {
         _input: iced_futures::subscription::EventStream,
     ) -> iced_futures::BoxStream<Self::Output> {
         Box::pin(stream::unfold(self.receiver.clone(), |r| async move {
-            tokio::time::sleep(Duration::from_millis(1000)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
             let mut rx = r.lock().await;
             let mut buffer = Vec::with_capacity(rx.len());
             let limit = buffer.capacity();
             let _ = rx.recv_many(&mut buffer, limit).await;
-            return Some((
-                Message::PacketsReceived(buffer.drain(..).collect()),
-                r.clone(),
-            ));
+            return Some((Message::PacketsReceived(buffer), r.clone()));
         }))
     }
 }
