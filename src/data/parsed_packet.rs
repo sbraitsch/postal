@@ -86,6 +86,7 @@ impl TransportPacket {
             TransportPacket::Udp(UdpPacket::owned(vec![0u8; 20]).unwrap()),
             false,
         );
+        map.insert(TransportPacket::Other, false);
         map
     }
 }

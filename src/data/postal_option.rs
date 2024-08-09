@@ -8,7 +8,7 @@ pub enum PostalOption {
 impl PostalOption {
     pub fn as_map() -> HashMap<PostalOption, bool> {
         let mut map = HashMap::new();
-        map.insert(PostalOption::Autoscroll, false);
+        map.insert(PostalOption::Autoscroll, true);
         map
     }
 }

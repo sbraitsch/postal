@@ -18,14 +18,14 @@ use iced::executor;
 use iced::widget::scrollable;
 use iced::widget::vertical_rule;
 use iced::widget::Button;
-use iced::widget::{button, column, container, horizontal_space, pick_list, row};
+use iced::widget::{button, column, container, horizontal_space, row};
 use iced::Font;
+use iced::Size;
 use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
 use pnet::datalink;
 use pnet::datalink::NetworkInterface;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -42,18 +42,20 @@ static NETWORK_INTERFACES: Lazy<Vec<NetworkInterface>> = Lazy::new(|| {
 
 #[tokio::main]
 pub async fn main() -> iced::Result {
-    Postal::run(Settings::default())
+    let mut settings = Settings::default();
+    settings.default_font = Font::MONOSPACE;
+    settings.window.size = Size::new(1600.0, 900.0);
+    Postal::run(settings)
 }
 
 #[derive(Debug)]
 struct Postal {
-    sniff: bool,
+    capturing: bool,
     theme: Theme,
     packets: Vec<ParsedPacket>,
     options: HashMap<PostalOption, bool>,
     filter: HashMap<TransportPacket, bool>,
-    sender: Arc<Mutex<Sender<ParsedPacket>>>,
-    receiver: Arc<Mutex<Receiver<ParsedPacket>>>,
+    receiver: Option<Arc<Mutex<Receiver<ParsedPacket>>>>,
     cancellation_token: CancellationToken,
     network_interface: NetworkInterface,
 }
@@ -62,30 +64,31 @@ struct Postal {
 pub enum Message {
     ThemeSelected(Theme),
     PacketsReceived(Vec<ParsedPacket>),
-    Sniffing(bool),
+    PacketsDrained(Vec<ParsedPacket>),
+    StartSniffing,
+    StopSniffing,
     OptionChanged(PostalOption, bool),
     FilterChanged(TransportPacket, bool),
     Scrolled(scrollable::Viewport),
     NetworkInterfaceSelected(String),
+    ClearCache,
 }
 
 impl Application for Postal {
+    type Executor = executor::Default;
     type Message = Message;
     type Theme = Theme;
-    type Executor = executor::Default;
     type Flags = ();
 
     fn new(_flags: Self::Flags) -> (Self, Command<Message>) {
-        let (tx, rx) = mpsc::channel::<ParsedPacket>(1000);
         (
             Self {
-                sniff: false,
+                capturing: false,
                 theme: Theme::GruvboxDark,
                 packets: vec![],
                 options: PostalOption::as_map(),
                 filter: TransportPacket::as_map(),
-                sender: Arc::new(Mutex::new(tx)),
-                receiver: Arc::new(Mutex::new(rx)),
+                receiver: None,
                 cancellation_token: CancellationToken::new(),
                 network_interface: NETWORK_INTERFACES
                     .iter()
@@ -107,26 +110,25 @@ impl Application for Postal {
                 self.theme = theme;
             }
             Message::PacketsReceived(mut packets) => {
-                self.packets.append(&mut packets);
-                if self.options[&PostalOption::Autoscroll] {
-                    return scrollable::snap_to(
-                        SCROLLABLE_ID.clone(),
-                        scrollable::RelativeOffset::END,
-                    );
-                }
+                return append_new_packets(&mut self.packets, &mut packets, &mut self.options);
             }
-            Message::Sniffing(sniff) => {
-                self.sniff = sniff;
-                if sniff {
-                    println!("Started sniffing");
-                    let tx = self.sender.clone();
-                    let token = CancellationToken::new();
-                    self.cancellation_token = token.clone();
-                    let ninf = self.network_interface.clone();
-                    thread::spawn(move || PacketSubscription::sniff(tx, ninf, token));
-                } else {
-                    self.cancellation_token.cancel();
-                }
+            Message::PacketsDrained(mut packets) => {
+                self.capturing = false;
+                return append_new_packets(&mut self.packets, &mut packets, &mut self.options);
+            }
+            Message::StartSniffing => {
+                println!("Capturing..");
+                let (tx, rx) = mpsc::channel::<ParsedPacket>(1000);
+                self.receiver = Some(Arc::new(Mutex::new(rx)));
+                let token = CancellationToken::new();
+                self.cancellation_token = token.clone();
+                let ninf = self.network_interface.clone();
+                thread::spawn(move || PacketSubscription::sniff(tx, ninf, token));
+                self.capturing = true;
+            }
+            Message::StopSniffing => {
+                println!("Capture stopped.");
+                self.cancellation_token.cancel();
             }
             Message::OptionChanged(opt, b) => {
                 self.options
@@ -136,11 +138,13 @@ impl Application for Postal {
             }
             Message::Scrolled(_) => {}
             Message::NetworkInterfaceSelected(n) => {
+                self.cancellation_token.cancel();
                 self.network_interface = NETWORK_INTERFACES
                     .iter()
                     .find(|i| i.name == n)
                     .expect("Network Interface not recognized")
-                    .clone()
+                    .clone();
+                self.packets.clear();
             }
             Message::FilterChanged(f, b) => {
                 self.filter
@@ -148,31 +152,26 @@ impl Application for Postal {
                     .and_modify(|toggled| *toggled = b)
                     .or_default();
             }
+            Message::ClearCache => self.packets.clear(),
         }
 
         Command::none()
     }
 
-    fn subscription(&self) -> Subscription<Message> {
-        if self.sniff {
-            iced_futures::Subscription::from_recipe(PacketSubscription::new(self.receiver.clone()))
-        } else {
-            Subscription::none()
-        }
-    }
-
     fn view(&self) -> Element<Message> {
-        let sniff_btn: Button<_> = if !self.sniff {
-            button(monospace_bold("Capture    ").size(20))
+        let sniff_btn: Button<_> = if !self.capturing {
+            button(monospace_bold("Capture!").size(20))
                 .style(ButtonStyleSheet::new())
-                .on_press(Message::Sniffing(!self.sniff))
+                .on_press(Message::StartSniffing)
         } else {
             button(monospace_bold("Capturing..").size(20))
                 .style(ButtonStyleSheet::new())
-                .on_press(Message::Sniffing(!self.sniff))
+                .on_press(Message::StopSniffing)
         };
         let footer = row![
-            pick_list(Theme::ALL, Some(&self.theme), Message::ThemeSelected).font(Font::MONOSPACE),
+            button(monospace_bold("Clear").size(20))
+                .style(ButtonStyleSheet::new())
+                .on_press(Message::ClearCache),
             horizontal_space(),
             monospace(format!("Captured {} Packets", self.packets.len())).size(16),
             horizontal_space(),
@@ -184,7 +183,8 @@ impl Application for Postal {
         let sidebar = Sidebar::view(
             &self.options,
             &self.filter,
-            self.network_interface.name.clone(),
+            &self.network_interface.name,
+            &self.theme,
         );
         let packet_list =
             PacketList {}.view(&self.packets, &self.network_interface.ips, &self.filter);
@@ -204,5 +204,29 @@ impl Application for Postal {
 
     fn theme(&self) -> Theme {
         self.theme.clone()
+    }
+
+    fn subscription(&self) -> Subscription<Message> {
+        if self.capturing {
+            iced_futures::Subscription::from_recipe(PacketSubscription::new(
+                self.receiver.as_ref().unwrap().clone(),
+                self.cancellation_token.clone(),
+            ))
+        } else {
+            Subscription::none()
+        }
+    }
+}
+
+fn append_new_packets(
+    packets: &mut Vec<ParsedPacket>,
+    new_packets: &mut Vec<ParsedPacket>,
+    options: &mut HashMap<PostalOption, bool>,
+) -> iced::Command<Message> {
+    packets.append(new_packets);
+    if options[&PostalOption::Autoscroll] {
+        return scrollable::snap_to(SCROLLABLE_ID.clone(), scrollable::RelativeOffset::END);
+    } else {
+        Command::none()
     }
 }

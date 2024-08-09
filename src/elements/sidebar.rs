@@ -4,7 +4,7 @@ use crate::data::parsed_packet::TransportPacket;
 use crate::data::postal_option::PostalOption;
 use crate::{column, container, row, Alignment, Element, Length, Message, NETWORK_INTERFACES};
 use iced::widget::{checkbox, horizontal_rule, horizontal_space, pick_list, Column};
-use iced::Font;
+use iced::{Font, Theme};
 
 use super::monospace_text::{monospace, monospace_bold};
 
@@ -14,7 +14,8 @@ impl<'a> Sidebar {
     pub fn view(
         options: &HashMap<PostalOption, bool>,
         filters: &'a HashMap<TransportPacket, bool>,
-        selected_interface: String,
+        selected_interface: &'a String,
+        selected_theme: &'a Theme,
     ) -> Element<'a, Message> {
         let setting_header = container(
             monospace_bold("Settings")
@@ -35,10 +36,9 @@ impl<'a> Sidebar {
         let opt_rows = options
             .iter()
             .map(|(&option, &toggled)| {
-                let opt = option.clone();
                 let cb = checkbox("", toggled)
                     .font(Font::MONOSPACE)
-                    .on_toggle(move |t| Message::OptionChanged(opt.clone(), t));
+                    .on_toggle(move |t| Message::OptionChanged(option, t));
                 row![monospace(option.to_string()), horizontal_space(), cb].into()
             })
             .collect::<Vec<_>>();
@@ -46,20 +46,23 @@ impl<'a> Sidebar {
         let filter_rows = filters
             .into_iter()
             .map(|(filter, toggled)| {
-                let filt = filter.clone();
+                let f = filter.clone();
                 let cb = checkbox("", *toggled)
                     .font(Font::MONOSPACE)
-                    .on_toggle(move |t| Message::FilterChanged(filt.clone(), t));
+                    .on_toggle(move |t| Message::FilterChanged(f.clone(), t));
                 row![monospace(filter.to_string()), horizontal_space(), cb].into()
             })
             .collect::<Vec<_>>();
-
         let settings_container = container(
             Column::with_children(opt_rows)
                 .spacing(10)
                 .padding(10)
                 .width(Length::Fill)
-                .align_items(Alignment::Start),
+                .align_items(Alignment::Start)
+                .push(
+                    pick_list(Theme::ALL, Some(selected_theme), Message::ThemeSelected)
+                        .font(Font::MONOSPACE),
+                ),
         )
         .width(Length::FillPortion(1))
         .center_y();

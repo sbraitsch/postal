@@ -17,32 +17,29 @@ use crate::{data::parsed_packet::ParsedPacket, Message};
 #[derive(Debug)]
 pub struct PacketSubscription {
     pub receiver: Arc<Mutex<Receiver<ParsedPacket>>>,
+    pub token: CancellationToken,
 }
 
 impl PacketSubscription {
-    pub fn new(rx: Arc<Mutex<Receiver<ParsedPacket>>>) -> Self {
-        PacketSubscription { receiver: rx }
+    pub fn new(rx: Arc<Mutex<Receiver<ParsedPacket>>>, token: CancellationToken) -> Self {
+        PacketSubscription {
+            receiver: rx,
+            token,
+        }
     }
 
-    pub fn sniff(
-        tx: Arc<Mutex<Sender<ParsedPacket>>>,
-        interface: NetworkInterface,
-        token: CancellationToken,
-    ) {
-        let sender = tx.blocking_lock();
-
+    pub fn sniff(tx: Sender<ParsedPacket>, interface: NetworkInterface, token: CancellationToken) {
         if let Ok(Ethernet(_, mut rx)) = datalink::channel(&interface, Config::default()) {
             while !token.is_cancelled() {
                 if let Ok(packet) = rx.next() {
                     match ParsedPacket::parse(packet) {
                         Some(p) => {
-                            let _ = sender.blocking_send(p);
+                            let _ = tx.blocking_send(p);
                         }
                         None => {}
                     }
                 }
             }
-            println!("Stopped sniffing task.")
         }
     }
 }
@@ -59,13 +56,28 @@ impl Recipe for PacketSubscription {
         self: Box<Self>,
         _input: iced_futures::subscription::EventStream,
     ) -> iced_futures::BoxStream<Self::Output> {
-        Box::pin(stream::unfold(self.receiver.clone(), |r| async move {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            let mut rx = r.lock().await;
-            let mut buffer = Vec::with_capacity(rx.len());
-            let limit = buffer.capacity();
-            let _ = rx.recv_many(&mut buffer, limit).await;
-            return Some((Message::PacketsReceived(buffer), r.clone()));
-        }))
+        Box::pin(stream::unfold(
+            (self.receiver.clone(), self.token.clone()),
+            |(r, t)| async move {
+                if !t.is_cancelled() {
+                    let mut rx = r.lock().await;
+                    let mut buffer = Vec::with_capacity(rx.len());
+                    let limit = buffer.capacity();
+                    let _ = rx.recv_many(&mut buffer, limit).await;
+                    tokio::select! {
+                        _ = t.cancelled() => {
+                            // drain channel instantly on cancel
+                            return Some((Message::PacketsDrained(buffer), (r.clone(), t.clone())));
+                        }
+                        _ = tokio::time::sleep(Duration::from_millis(100)) => {
+                            // no cancel -> buffer longer
+                            return Some((Message::PacketsReceived(buffer), (r.clone(), t.clone())));
+                        }
+                    }
+                } else {
+                    None
+                }
+            },
+        ))
     }
 }
