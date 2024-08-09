@@ -12,7 +12,7 @@ impl ParsedPacket {
         let (port, protocol) = match &self.transport {
             TransportPacket::Tcp(tcp) => (format!(":{}", tcp.get_destination()), "TCP".to_string()),
             TransportPacket::Udp(udp) => (format!(":{}", udp.get_destination()), "UDP".to_string()),
-            TransportPacket::Other => return None,
+            TransportPacket::Other => (format!(""), "OTHER".to_string()),
         };
         let dir = if inbound {
             "IN  <-".to_string()
@@ -30,10 +30,10 @@ impl ParsedPacket {
             .width(Length::FillPortion(1));
         let source_text = monospace(self.source_ip.to_string())
             .style(PostalColor::SOURCE)
-            .width(Length::FillPortion(2));
+            .width(Length::FillPortion(3));
         let destination_text = monospace(self.destination_ip.to_string())
             .style(PostalColor::DESTINATION)
-            .width(Length::FillPortion(2));
+            .width(Length::FillPortion(3));
 
         Some(
             row![

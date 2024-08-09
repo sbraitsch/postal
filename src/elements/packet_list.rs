@@ -30,10 +30,10 @@ impl PacketList {
                 .width(Length::FillPortion(1)),
             monospace_bold("Source IP")
                 .size(16)
-                .width(Length::FillPortion(2)),
+                .width(Length::FillPortion(3)),
             monospace_bold("Destination IP")
                 .size(16)
-                .width(Length::FillPortion(2)),
+                .width(Length::FillPortion(3)),
         ]
         .width(Length::Fill)
         .padding(10);

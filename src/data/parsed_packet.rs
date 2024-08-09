@@ -1,7 +1,9 @@
 use core::str;
 use std::hash::{Hash, Hasher};
+use std::net::IpAddr;
 use std::{collections::HashMap, net::Ipv4Addr};
 
+use pnet::packet::ipv6::Ipv6Packet;
 use pnet::packet::{
     ethernet::{EtherTypes, EthernetPacket},
     ip::IpNextHeaderProtocols,
@@ -13,8 +15,8 @@ use pnet::packet::{
 
 #[derive(Debug, Clone)]
 pub struct ParsedPacket {
-    pub source_ip: Ipv4Addr,
-    pub destination_ip: Ipv4Addr,
+    pub source_ip: IpAddr,
+    pub destination_ip: IpAddr,
     pub transport: TransportPacket,
 }
 
@@ -30,18 +32,21 @@ impl ParsedPacket {
         if let Some(eth_packet) = EthernetPacket::new(data) {
             if eth_packet.get_ethertype() == EtherTypes::Ipv4 {
                 if let Some(ipv4_packet) = Ipv4Packet::new(eth_packet.payload()) {
-                    let transport = match ipv4_packet.get_next_level_protocol() {
-                        IpNextHeaderProtocols::Tcp => TransportPacket::Tcp(
-                            TcpPacket::owned(ipv4_packet.payload().to_vec()).unwrap(),
-                        ),
-                        IpNextHeaderProtocols::Udp => TransportPacket::Udp(
-                            UdpPacket::owned(ipv4_packet.payload().to_vec()).unwrap(),
-                        ),
-                        _ => TransportPacket::Other,
-                    };
+                    let transport =
+                        parse_transport_packet(ipv4_packet.get_next_level_protocol(), &ipv4_packet);
                     return Some(Self {
-                        source_ip: ipv4_packet.get_source(),
-                        destination_ip: ipv4_packet.get_destination(),
+                        source_ip: IpAddr::V4(ipv4_packet.get_source()),
+                        destination_ip: IpAddr::V4(ipv4_packet.get_destination()),
+                        transport,
+                    });
+                }
+            } else if eth_packet.get_ethertype() == EtherTypes::Ipv6 {
+                if let Some(ipv6_packet) = Ipv6Packet::new(eth_packet.payload()) {
+                    let transport =
+                        parse_transport_packet(ipv6_packet.get_next_header(), &ipv6_packet);
+                    return Some(Self {
+                        source_ip: IpAddr::V6(ipv6_packet.get_source()),
+                        destination_ip: IpAddr::V6(ipv6_packet.get_source()),
                         transport,
                     });
                 }
@@ -49,6 +54,22 @@ impl ParsedPacket {
         }
         None
     }
+}
+
+fn parse_transport_packet(
+    protocol: pnet::packet::ip::IpNextHeaderProtocol,
+    ip_packet: &impl Packet,
+) -> TransportPacket {
+    let transport = match protocol {
+        IpNextHeaderProtocols::Tcp => {
+            TransportPacket::Tcp(TcpPacket::owned(ip_packet.payload().to_vec()).unwrap())
+        }
+        IpNextHeaderProtocols::Udp => {
+            TransportPacket::Udp(UdpPacket::owned(ip_packet.payload().to_vec()).unwrap())
+        }
+        _ => TransportPacket::Other,
+    };
+    transport
 }
 
 impl ToString for ParsedPacket {
