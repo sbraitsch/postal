@@ -62,6 +62,14 @@ impl ParsedPacket {
             NetworkPacket::Other => None,
         }
     }
+
+    pub fn get_port(&self) -> Option<u16> {
+        match &self.transport {
+            TransportPacket::Tcp(tcp) => Some(tcp.get_destination()),
+            TransportPacket::Udp(udp) => Some(udp.get_destination()),
+            TransportPacket::Other => None,
+        }
+    }
 }
 
 fn parse_transport_protocol(

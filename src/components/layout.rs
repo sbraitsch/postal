@@ -9,7 +9,7 @@ use super::{
     monospace_text::{monospace, monospace_bold},
     packet_list::PacketList,
     sidebar::Sidebar,
-    styled_button::ButtonStyleSheet,
+    styled_buttons::SubtleButton,
 };
 
 pub struct Layout {}
@@ -18,16 +18,16 @@ impl Layout {
     pub fn view(app: &Postal) -> Element<Message> {
         let sniff_btn: Button<_> = if !app.capturing {
             button(monospace_bold("Capture!").size(20))
-                .style(ButtonStyleSheet::new())
+                .style(SubtleButton::new())
                 .on_press(Message::StartSniffing)
         } else {
             button(monospace_bold("Capturing..").size(20))
-                .style(ButtonStyleSheet::new())
+                .style(SubtleButton::new())
                 .on_press(Message::StopSniffing)
         };
         let footer = row![
             button(monospace_bold("Clear").size(20))
-                .style(ButtonStyleSheet::new())
+                .style(SubtleButton::new())
                 .on_press(Message::ClearCache),
             horizontal_space(),
             monospace(format!("Captured {} Packets", app.packets.len())).size(16),
@@ -37,13 +37,8 @@ impl Layout {
         .spacing(20)
         .align_items(Alignment::Center);
 
-        let sidebar = Sidebar::view(
-            &app.options,
-            &app.filter,
-            &app.network_interface.name,
-            &app.theme,
-        );
-        let packet_list = PacketList::view(&app.packets, &app.network_interface.ips, &app.filter);
+        let sidebar = Sidebar::view(&app);
+        let packet_list = PacketList::view(&app);
         let main = container(row![sidebar, vertical_rule(1), packet_list])
             .style(|theme: &Theme| {
                 let palette = theme.extended_palette();

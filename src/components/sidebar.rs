@@ -1,10 +1,7 @@
-use std::collections::HashMap;
-
-use crate::data::parsed_packet::TransportPacket;
-use crate::data::postal_option::PostalOption;
-use crate::{Alignment, Element, Length, Message, NETWORK_INTERFACES};
+use crate::{Alignment, Element, Length, Message, Postal, NETWORK_INTERFACES};
 use iced::widget::{
     checkbox, column, container, horizontal_rule, horizontal_space, pick_list, row, Column,
+    TextInput,
 };
 use iced::{Font, Theme};
 
@@ -13,12 +10,7 @@ use super::monospace_text::{monospace, monospace_bold};
 pub struct Sidebar;
 
 impl<'a> Sidebar {
-    pub fn view(
-        options: &HashMap<PostalOption, bool>,
-        filters: &'a HashMap<TransportPacket, bool>,
-        selected_interface: &'a String,
-        selected_theme: &'a Theme,
-    ) -> Element<'a, Message> {
+    pub fn view(app: &'a Postal) -> Element<'a, Message> {
         let setting_header = container(
             monospace_bold("Settings")
                 .size(20)
@@ -35,7 +27,19 @@ impl<'a> Sidebar {
         .width(Length::Fill)
         .padding(10);
 
-        let opt_rows = options
+        let interface_picker = pick_list(
+            NETWORK_INTERFACES
+                .iter()
+                .map(|int| int.name.to_string())
+                .collect::<Vec<String>>(),
+            Some(app.network_interface.to_string()),
+            Message::NetworkInterfaceSelected,
+        )
+        .font(Font::MONOSPACE)
+        .width(Length::Fill);
+
+        let opt_rows = app
+            .options
             .iter()
             .map(|(&option, &toggled)| {
                 let cb = checkbox("", toggled)
@@ -45,8 +49,32 @@ impl<'a> Sidebar {
             })
             .collect::<Vec<_>>();
 
-        let filter_rows = filters
-            .into_iter()
+        let settings_container = container(
+            Column::with_children(opt_rows)
+                .spacing(10)
+                .padding(10)
+                .width(Length::Fill)
+                .align_items(Alignment::Start)
+                .push(column![
+                    monospace("Theme:"),
+                    pick_list(Theme::ALL, Some(&app.theme), Message::ThemeSelected)
+                        .font(Font::MONOSPACE)
+                        .width(Length::Fill)
+                ])
+                .push(column![monospace("Network Interface:"), interface_picker]),
+        )
+        .width(Length::FillPortion(1))
+        .center_y();
+
+        let port_input = TextInput::new("e.g. 80, 443,..", &app.port_input)
+            .on_input(Message::PortInputChanged)
+            .on_submit(Message::PortFilterApplied)
+            .font(Font::MONOSPACE)
+            .padding(10);
+
+        let type_rows = app
+            .tp_types
+            .iter()
             .map(|(filter, toggled)| {
                 let f = filter.clone();
                 let cb = checkbox("", *toggled)
@@ -55,40 +83,17 @@ impl<'a> Sidebar {
                 row![monospace(filter.to_string()), horizontal_space(), cb].into()
             })
             .collect::<Vec<_>>();
-        let settings_container = container(
-            Column::with_children(opt_rows)
+
+        let types_container = container(
+            Column::with_children(type_rows)
                 .spacing(10)
                 .padding(10)
                 .width(Length::Fill)
                 .align_items(Alignment::Start)
-                .push(
-                    pick_list(Theme::ALL, Some(selected_theme), Message::ThemeSelected)
-                        .font(Font::MONOSPACE),
-                ),
-        )
-        .width(Length::FillPortion(1))
-        .center_y();
-
-        let filters_container = container(
-            Column::with_children(filter_rows)
-                .spacing(10)
-                .padding(10)
-                .width(Length::Fill)
-                .align_items(Alignment::Start),
+                .push(column![monospace("Ports:"), port_input]),
         )
         .height(Length::Fill)
         .width(Length::FillPortion(1));
-
-        let interface_picker = pick_list(
-            NETWORK_INTERFACES
-                .iter()
-                .map(|int| int.name.to_string())
-                .collect::<Vec<String>>(),
-            Some(selected_interface),
-            Message::NetworkInterfaceSelected,
-        )
-        .font(Font::MONOSPACE)
-        .width(Length::Fill);
 
         column![
             setting_header,
@@ -97,9 +102,7 @@ impl<'a> Sidebar {
             horizontal_rule(1),
             filter_header,
             horizontal_rule(1),
-            filters_container,
-            horizontal_rule(1),
-            interface_picker
+            types_container,
         ]
         .into()
     }

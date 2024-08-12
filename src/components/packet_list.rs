@@ -1,22 +1,14 @@
-use std::collections::HashMap;
-
 use iced::widget::{column, container, horizontal_rule, row, scrollable, Column};
 use iced::{Alignment, Element, Length};
-use pnet::ipnetwork::IpNetwork;
 
-use crate::data::parsed_packet::{ParsedPacket, TransportPacket};
-use crate::{Message, SCROLLABLE_ID};
+use crate::{Message, Postal, SCROLLABLE_ID};
 
 use super::monospace_text::monospace_bold;
 
 pub struct PacketList {}
 
 impl PacketList {
-    pub fn view<'a>(
-        packets: &'a Vec<ParsedPacket>,
-        own_ips: &'a Vec<IpNetwork>,
-        filter: &'a HashMap<TransportPacket, bool>,
-    ) -> Element<'a, Message> {
+    pub fn view<'a>(app: &'a Postal) -> Element<'a, Message> {
         let header = row![
             monospace_bold("Direction")
                 .size(16)
@@ -33,16 +25,27 @@ impl PacketList {
             monospace_bold("Destination IP")
                 .size(16)
                 .width(Length::FillPortion(3)),
+            monospace_bold("Payload")
+                .size(16)
+                .width(Length::FillPortion(1)),
         ]
         .width(Length::Fill)
         .padding(10);
 
-        let elem = packets
+        let elem = app
+            .packets
             .iter()
-            .filter(|p| filter[&p.transport])
-            .filter_map(|p| {
+            .filter(|p| {
+                app.tp_types[&p.transport]
+                    && match p.get_port() {
+                        Some(port) => app.port_list.contains(&port) || app.port_list.is_empty(),
+                        None => false,
+                    }
+            })
+            .map(|p| {
                 p.view(
-                    own_ips
+                    app.network_interface
+                        .ips
                         .iter()
                         .any(|nw| nw.ip() == p.get_source_ip().unwrap()),
                 )

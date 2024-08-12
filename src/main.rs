@@ -45,7 +45,9 @@ struct Postal {
     theme: Theme,
     packets: Vec<ParsedPacket>,
     options: HashMap<PostalOption, bool>,
-    filter: HashMap<TransportPacket, bool>,
+    tp_types: HashMap<TransportPacket, bool>,
+    port_input: String,
+    port_list: Vec<u16>,
     receiver: Option<Arc<Mutex<Receiver<ParsedPacket>>>>,
     cancellation_token: CancellationToken,
     network_interface: NetworkInterface,
@@ -63,6 +65,9 @@ pub enum Message {
     Scrolled(scrollable::Viewport),
     NetworkInterfaceSelected(String),
     ClearCache,
+    RowClicked(Vec<u8>),
+    PortInputChanged(String),
+    PortFilterApplied,
 }
 
 impl Application for Postal {
@@ -78,7 +83,9 @@ impl Application for Postal {
                 theme: Theme::GruvboxDark,
                 packets: vec![],
                 options: PostalOption::as_map(),
-                filter: TransportPacket::as_map(),
+                tp_types: TransportPacket::as_map(),
+                port_input: String::new(),
+                port_list: vec![],
                 receiver: None,
                 cancellation_token: CancellationToken::new(),
                 network_interface: NETWORK_INTERFACES
@@ -138,12 +145,27 @@ impl Application for Postal {
                 self.packets.clear();
             }
             Message::FilterChanged(f, b) => {
-                self.filter
+                self.tp_types
                     .entry(f)
                     .and_modify(|toggled| *toggled = b)
                     .or_default();
             }
             Message::ClearCache => self.packets.clear(),
+            Message::RowClicked(payload) => println!("{:?}", String::from_utf8(payload)),
+            Message::PortInputChanged(ports) => self.port_input = ports,
+            Message::PortFilterApplied => {
+                self.port_list = self
+                    .port_input
+                    .split(",")
+                    .filter_map(|port| {
+                        let trimmed = port.trim();
+                        match trimmed.parse::<u16>() {
+                            Ok(val) => Some(val),
+                            Err(_) => None,
+                        }
+                    })
+                    .collect::<Vec<u16>>();
+            }
         }
 
         Command::none()
