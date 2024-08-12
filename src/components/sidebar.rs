@@ -2,8 +2,10 @@ use std::collections::HashMap;
 
 use crate::data::parsed_packet::TransportPacket;
 use crate::data::postal_option::PostalOption;
-use crate::{column, container, row, Alignment, Element, Length, Message, NETWORK_INTERFACES};
-use iced::widget::{checkbox, horizontal_rule, horizontal_space, pick_list, Column};
+use crate::{Alignment, Element, Length, Message, NETWORK_INTERFACES};
+use iced::widget::{
+    checkbox, column, container, horizontal_rule, horizontal_space, pick_list, row, Column,
+};
 use iced::{Font, Theme};
 
 use super::monospace_text::{monospace, monospace_bold};

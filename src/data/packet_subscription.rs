@@ -32,7 +32,7 @@ impl PacketSubscription {
         if let Ok(Ethernet(_, mut rx)) = datalink::channel(&interface, Config::default()) {
             while !token.is_cancelled() {
                 if let Ok(packet) = rx.next() {
-                    match ParsedPacket::parse(packet) {
+                    match ParsedPacket::parse(packet.to_vec()) {
                         Some(p) => {
                             let _ = tx.blocking_send(p);
                         }

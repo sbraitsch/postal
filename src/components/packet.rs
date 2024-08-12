@@ -1,7 +1,7 @@
 use iced::{widget::row, Element, Length};
 
 use crate::{
-    data::parsed_packet::{ParsedPacket, TransportPacket},
+    data::parsed_packet::{NetworkPacket, ParsedPacket, TransportPacket},
     Message,
 };
 
@@ -12,8 +12,20 @@ impl ParsedPacket {
         let (port, protocol) = match &self.transport {
             TransportPacket::Tcp(tcp) => (format!(":{}", tcp.get_destination()), "TCP".to_string()),
             TransportPacket::Udp(udp) => (format!(":{}", udp.get_destination()), "UDP".to_string()),
-            TransportPacket::Other => (format!(""), "OTHER".to_string()),
+            TransportPacket::Other => (String::new(), "OTHER".to_string()),
         };
+        let (source, dest) = match &self.net {
+            NetworkPacket::Ipv4(v4) => (
+                v4.get_source().to_string(),
+                v4.get_destination().to_string(),
+            ),
+            NetworkPacket::Ipv6(v6) => (
+                v6.get_source().to_string(),
+                v6.get_destination().to_string(),
+            ),
+            NetworkPacket::Other => (String::new(), String::new()),
+        };
+
         let dir = if inbound {
             "IN  <-".to_string()
         } else {
@@ -28,10 +40,12 @@ impl ParsedPacket {
         let port_text = monospace(port)
             .style(PostalColor::PORT)
             .width(Length::FillPortion(1));
-        let source_text = monospace(self.source_ip.to_string())
+
+        let source_text = monospace(source)
             .style(PostalColor::SOURCE)
             .width(Length::FillPortion(3));
-        let destination_text = monospace(self.destination_ip.to_string())
+
+        let destination_text = monospace(dest)
             .style(PostalColor::DESTINATION)
             .width(Length::FillPortion(3));
 

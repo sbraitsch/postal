@@ -13,7 +13,6 @@ pub struct PacketList {}
 
 impl PacketList {
     pub fn view<'a>(
-        self,
         packets: &'a Vec<ParsedPacket>,
         own_ips: &'a Vec<IpNetwork>,
         filter: &'a HashMap<TransportPacket, bool>,
@@ -41,7 +40,13 @@ impl PacketList {
         let elem = packets
             .iter()
             .filter(|p| filter[&p.transport])
-            .filter_map(|p| p.view(own_ips.iter().any(|nw| nw.ip() == p.source_ip)))
+            .filter_map(|p| {
+                p.view(
+                    own_ips
+                        .iter()
+                        .any(|nw| nw.ip() == p.get_source_ip().unwrap()),
+                )
+            })
             .collect::<Vec<Element<Message>>>();
 
         let packet_list = container(
