@@ -1,6 +1,4 @@
-use iced::{widget::button, Border, Color};
-
-use super::colors::PostalColor;
+use iced::{widget::button, Border};
 
 pub struct SubtleButton;
 
@@ -16,15 +14,14 @@ impl button::StyleSheet for SubtleButton {
     fn active(&self, style: &Self::Style) -> button::Appearance {
         button::Appearance {
             text_color: style.palette().text,
-            background: Some(iced::Background::Color(iced::Color::TRANSPARENT)),
             ..Default::default()
         }
     }
 
     fn hovered(&self, style: &Self::Style) -> button::Appearance {
         button::Appearance {
-            background: Some(iced::Background::Color(style.palette().primary)),
-            text_color: iced::Color::WHITE,
+            background: Some(iced::Background::Color(style.palette().text)),
+            text_color: style.palette().background,
             border: Border::with_radius(3),
             ..Default::default()
         }
@@ -44,16 +41,16 @@ impl button::StyleSheet for PayloadButton {
 
     fn active(&self, style: &Self::Style) -> button::Appearance {
         button::Appearance {
-            text_color: Color::WHITE,
-            background: Some(iced::Background::Color(style.palette().primary)),
+            text_color: style.palette().background,
+            background: Some(iced::Background::Color(style.palette().text)),
             ..Default::default()
         }
     }
 
-    fn hovered(&self, _style: &Self::Style) -> button::Appearance {
+    fn hovered(&self, style: &Self::Style) -> button::Appearance {
         button::Appearance {
-            background: Some(iced::Background::Color(PostalColor::SOURCE)),
-            text_color: iced::Color::WHITE,
+            background: Some(iced::Background::Color(style.palette().text)),
+            text_color: style.palette().background,
             border: Border::with_radius(3),
             ..Default::default()
         }

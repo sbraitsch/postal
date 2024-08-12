@@ -127,6 +127,7 @@ impl Application for Postal {
             Message::StopSniffing => {
                 println!("Capture stopped.");
                 self.cancellation_token.cancel();
+                self.capturing = false;
             }
             Message::OptionChanged(opt, b) => {
                 self.options
