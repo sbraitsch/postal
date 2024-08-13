@@ -1,5 +1,6 @@
 mod components;
 mod data;
+mod utils;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -13,7 +14,7 @@ use iced::executor;
 use iced::widget::scrollable;
 use iced::Font;
 use iced::Size;
-use iced::{Alignment, Application, Command, Element, Length, Settings, Subscription, Theme};
+use iced::{Application, Command, Element, Settings, Subscription, Theme};
 use pnet::datalink;
 use pnet::datalink::NetworkInterface;
 use tokio::sync::mpsc;
@@ -43,11 +44,14 @@ pub async fn main() -> iced::Result {
 struct Postal {
     capturing: bool,
     theme: Theme,
+    total_captured: usize,
     packets: Vec<ParsedPacket>,
-    options: HashMap<PostalOption, bool>,
+    options: HashMap<PostalOption, (bool, &'static str)>,
     tp_types: HashMap<TransportPacket, bool>,
     port_input: String,
     port_list: Vec<u16>,
+    cache_input: String,
+    cache_size: usize,
     receiver: Option<Arc<Mutex<Receiver<ParsedPacket>>>>,
     cancellation_token: CancellationToken,
     network_interface: NetworkInterface,
@@ -68,6 +72,8 @@ pub enum Message {
     RowClicked(Vec<u8>),
     PortInputChanged(String),
     PortFilterApplied,
+    CacheInputChanged(String),
+    CacheSizeApplied,
 }
 
 impl Application for Postal {
@@ -80,12 +86,15 @@ impl Application for Postal {
         (
             Self {
                 capturing: false,
-                theme: Theme::GruvboxDark,
+                theme: Theme::Light,
+                total_captured: 0,
                 packets: vec![],
                 options: PostalOption::as_map(),
                 tp_types: TransportPacket::as_map(),
                 port_input: String::new(),
                 port_list: vec![],
+                cache_input: String::from("1000"),
+                cache_size: 1000,
                 receiver: None,
                 cancellation_token: CancellationToken::new(),
                 network_interface: NETWORK_INTERFACES
@@ -108,11 +117,11 @@ impl Application for Postal {
                 self.theme = theme;
             }
             Message::PacketsReceived(mut packets) => {
-                return append_new_packets(&mut self.packets, &mut packets, &mut self.options);
+                return append_new_packets(self, &mut packets);
             }
             Message::PacketsDrained(mut packets) => {
                 self.capturing = false;
-                return append_new_packets(&mut self.packets, &mut packets, &mut self.options);
+                return append_new_packets(self, &mut packets);
             }
             Message::StartSniffing => {
                 println!("Capturing..");
@@ -121,7 +130,10 @@ impl Application for Postal {
                 let token = CancellationToken::new();
                 self.cancellation_token = token.clone();
                 let ninf = self.network_interface.clone();
-                tokio::task::spawn_blocking(move || PacketSubscription::sniff(tx, ninf, token));
+                let http_only = self.options[&PostalOption::HttpOnly].0;
+                tokio::task::spawn_blocking(move || {
+                    PacketSubscription::sniff(tx, ninf, http_only, token)
+                });
                 self.capturing = true;
             }
             Message::StopSniffing => {
@@ -132,7 +144,7 @@ impl Application for Postal {
             Message::OptionChanged(opt, b) => {
                 self.options
                     .entry(opt)
-                    .and_modify(|toggled| *toggled = b)
+                    .and_modify(|(toggled, _)| *toggled = b)
                     .or_default();
             }
             Message::Scrolled(_) => {}
@@ -167,6 +179,10 @@ impl Application for Postal {
                     })
                     .collect::<Vec<u16>>();
             }
+            Message::CacheInputChanged(size) => self.cache_input = size,
+            Message::CacheSizeApplied => {
+                self.cache_size = self.cache_input.parse::<usize>().unwrap_or(1000)
+            }
         }
 
         Command::none()
@@ -193,12 +209,12 @@ impl Application for Postal {
 }
 
 fn append_new_packets(
-    packets: &mut Vec<ParsedPacket>,
+    app: &mut Postal,
     new_packets: &mut Vec<ParsedPacket>,
-    options: &mut HashMap<PostalOption, bool>,
 ) -> iced::Command<Message> {
-    packets.append(new_packets);
-    if options[&PostalOption::Autoscroll] {
+    app.total_captured += new_packets.len();
+    app.packets.append(new_packets);
+    if app.options[&PostalOption::Autoscroll].0 {
         return scrollable::snap_to(SCROLLABLE_ID.clone(), scrollable::RelativeOffset::END);
     } else {
         Command::none()

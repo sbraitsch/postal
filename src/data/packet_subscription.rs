@@ -28,11 +28,16 @@ impl PacketSubscription {
         }
     }
 
-    pub fn sniff(tx: Sender<ParsedPacket>, interface: NetworkInterface, token: CancellationToken) {
+    pub fn sniff(
+        tx: Sender<ParsedPacket>,
+        interface: NetworkInterface,
+        http_only: bool,
+        token: CancellationToken,
+    ) {
         if let Ok(Ethernet(_, mut rx)) = datalink::channel(&interface, Config::default()) {
             while !token.is_cancelled() {
                 if let Ok(packet) = rx.next() {
-                    match ParsedPacket::parse(packet.to_vec()) {
+                    match ParsedPacket::parse(packet.to_vec(), http_only) {
                         Some(p) => {
                             let _ = tx.blocking_send(p);
                         }

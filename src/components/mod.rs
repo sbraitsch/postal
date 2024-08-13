@@ -1,9 +1,11 @@
 pub mod colored_container;
 pub mod colors;
+pub mod filters;
 pub mod layout;
 pub mod monospace_text;
 pub mod packet;
 pub mod packet_list;
+pub mod settings;
 pub mod sidebar;
 pub mod solid_tooltip;
 pub mod styled_buttons;

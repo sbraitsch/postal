@@ -9,25 +9,29 @@ pub struct PacketList {}
 
 impl PacketList {
     pub fn view<'a>(app: &'a Postal) -> Element<'a, Message> {
+        let relative_widths = [1, 1, 1, 3, 3, 1, 1];
         let header = row![
             monospace_bold("Direction")
                 .size(16)
-                .width(Length::FillPortion(1)),
+                .width(Length::FillPortion(relative_widths[0])),
             monospace_bold("Protocol")
                 .size(16)
-                .width(Length::FillPortion(1)),
+                .width(Length::FillPortion(relative_widths[1])),
             monospace_bold("Port")
                 .size(16)
-                .width(Length::FillPortion(1)),
+                .width(Length::FillPortion(relative_widths[2])),
             monospace_bold("Source IP")
                 .size(16)
-                .width(Length::FillPortion(3)),
+                .width(Length::FillPortion(relative_widths[3])),
             monospace_bold("Destination IP")
                 .size(16)
-                .width(Length::FillPortion(3)),
+                .width(Length::FillPortion(relative_widths[4])),
+            monospace_bold("Size")
+                .size(16)
+                .width(Length::FillPortion(relative_widths[5])),
             monospace_bold("Payload")
                 .size(16)
-                .width(Length::FillPortion(1)),
+                .width(Length::FillPortion(relative_widths[6])),
         ]
         .width(Length::Fill)
         .padding(10);
@@ -48,6 +52,7 @@ impl PacketList {
                         .ips
                         .iter()
                         .any(|nw| nw.ip() == p.get_source_ip().unwrap()),
+                    &relative_widths,
                 )
             })
             .collect::<Vec<Element<Message>>>();

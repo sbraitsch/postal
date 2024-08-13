@@ -2,6 +2,7 @@ use core::fmt;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
+use std::pin::Pin;
 
 use pnet::packet::ip::IpNextHeaderProtocol;
 use pnet::packet::ipv6::Ipv6Packet;
@@ -16,8 +17,8 @@ use pnet::packet::{
 
 #[derive(Debug)]
 pub struct ParsedPacket {
-    _data: Vec<u8>,
-    _eth: EthernetPacket<'static>,
+    pub data: Pin<Box<Vec<u8>>>,
+    pub eth: EthernetPacket<'static>,
     pub net: NetworkPacket,
     pub transport: TransportPacket,
 }
@@ -25,7 +26,7 @@ pub struct ParsedPacket {
 impl ParsedPacket {
     const ETHERNET_HEADER: usize = 14;
 
-    pub fn parse(data: Vec<u8>) -> Option<Self> {
+    pub fn parse(data: Vec<u8>, discard_non_http: bool) -> Option<Self> {
         let raw_data_static: &'static [u8] = unsafe { std::mem::transmute(&data[..]) };
         let eth = EthernetPacket::new(raw_data_static)?;
         let net = match eth.get_ethertype() {
@@ -37,19 +38,29 @@ impl ParsedPacket {
         let transport = match net {
             NetworkPacket::Ipv4(ref p) => {
                 let offset = Self::ETHERNET_HEADER + p.get_header_length() as usize * 4;
-                parse_transport_protocol(p.get_next_level_protocol(), raw_data_static, offset)?
+                parse_transport_protocol(
+                    p.get_next_level_protocol(),
+                    raw_data_static,
+                    offset,
+                    discard_non_http,
+                )?
             }
             NetworkPacket::Ipv6(ref p) => {
                 let header_len = p.packet().len() - p.get_payload_length() as usize;
                 let offset = Self::ETHERNET_HEADER + header_len;
-                parse_transport_protocol(p.get_next_header(), raw_data_static, offset)?
+                parse_transport_protocol(
+                    p.get_next_header(),
+                    raw_data_static,
+                    offset,
+                    discard_non_http,
+                )?
             }
             NetworkPacket::Other => return None,
         };
 
         Some(Self {
-            _data: data,
-            _eth: eth,
+            data: Pin::new(Box::new(data)),
+            eth,
             net,
             transport,
         })
@@ -76,16 +87,37 @@ fn parse_transport_protocol(
     protocol: IpNextHeaderProtocol,
     data: &'static [u8],
     offset: usize,
+    discard_non_http: bool,
 ) -> Option<TransportPacket> {
-    return Some(match protocol {
+    return match protocol {
         IpNextHeaderProtocols::Tcp => {
-            TransportPacket::Tcp(TcpPacket::new(&data[offset..]).unwrap())
+            let packet = TcpPacket::new(&data[offset..])?;
+            if discard_non_http
+                && (packet.get_destination() != 80 && packet.get_destination() != 443)
+            {
+                None
+            } else {
+                Some(TransportPacket::Tcp(packet))
+            }
         }
         IpNextHeaderProtocols::Udp => {
-            TransportPacket::Udp(UdpPacket::new(&data[offset..]).unwrap())
+            let packet = UdpPacket::new(&data[offset..])?;
+            if discard_non_http
+                && (packet.get_destination() != 80 && packet.get_destination() != 443)
+            {
+                None
+            } else {
+                Some(TransportPacket::Udp(packet))
+            }
         }
-        _ => TransportPacket::Other,
-    });
+        _ => {
+            if discard_non_http {
+                None
+            } else {
+                Some(TransportPacket::Other)
+            }
+        }
+    };
 }
 
 impl fmt::Display for ParsedPacket {
@@ -118,11 +150,11 @@ impl fmt::Display for ParsedPacket {
 
 impl Clone for ParsedPacket {
     fn clone(&self) -> Self {
-        let eth_data = self._eth.packet().to_vec();
+        let eth_data = self.eth.packet().to_vec();
         let eth_clone = EthernetPacket::owned(eth_data).unwrap();
         Self {
-            _data: self._data.clone(),
-            _eth: eth_clone,
+            data: self.data.clone(),
+            eth: eth_clone,
             net: self.net.clone(),
             transport: self.transport.clone(),
         }
@@ -180,12 +212,12 @@ impl Clone for TransportPacket {
     }
 }
 
-impl ToString for TransportPacket {
-    fn to_string(&self) -> String {
+impl fmt::Display for TransportPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TransportPacket::Tcp(_) => "TCP".to_string(),
-            TransportPacket::Udp(_) => "UDP".to_string(),
-            TransportPacket::Other => "OTHER".to_string(),
+            TransportPacket::Tcp(_) => write!(f, "TCP"),
+            TransportPacket::Udp(_) => write!(f, "UDP"),
+            TransportPacket::Other => write!(f, "OTHER"),
         }
     }
 }
@@ -241,12 +273,12 @@ impl Clone for NetworkPacket {
     }
 }
 
-impl ToString for NetworkPacket {
-    fn to_string(&self) -> String {
+impl fmt::Display for NetworkPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            NetworkPacket::Ipv4(_) => "IPv4".to_string(),
-            NetworkPacket::Ipv6(_) => "IPv6".to_string(),
-            NetworkPacket::Other => "OTHER".to_string(),
+            NetworkPacket::Ipv4(_) => write!(f, "IPv4"),
+            NetworkPacket::Ipv6(_) => write!(f, "IPv6"),
+            NetworkPacket::Other => write!(f, "OTHER"),
         }
     }
 }

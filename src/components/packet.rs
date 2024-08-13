@@ -8,6 +8,7 @@ use pnet::packet::Packet;
 
 use crate::{
     data::parsed_packet::{NetworkPacket, ParsedPacket, TransportPacket},
+    utils::byte_formatter::format_size,
     Message,
 };
 
@@ -18,7 +19,8 @@ use super::{
 };
 
 impl ParsedPacket {
-    pub fn view(&self, inbound: bool) -> Element<Message> {
+    pub fn view(&self, inbound: bool, relative_widths: &[u16]) -> Element<Message> {
+        let size = self.data.len();
         let (port, protocol, payload) = match &self.transport {
             TransportPacket::Tcp(tcp) => (
                 tcp.get_destination(),
@@ -44,9 +46,20 @@ impl ParsedPacket {
             NetworkPacket::Other => (String::new(), String::new()),
         };
 
+        let dir = if inbound {
+            "INCOMING".to_string()
+        } else {
+            "OUTGOING".to_string()
+        };
+        let dir_text = monospace_bold(dir);
+        let protocol_text = monospace_bold(protocol).style(PostalColor::MATTBLUE);
+        let port_text = monospace_bold(format!(":{port}")).style(PostalColor::ORANGE);
+        let source_text = monospace_bold(source).style(PostalColor::MINT);
+        let destination_text = monospace_bold(dest).style(PostalColor::PURPLE);
+        let size_text = monospace_bold(format_size(size));
         let inspect: Element<Message> = if port == 80 && !payload.is_empty() {
             Tooltip::new(
-                monospace_bold("[Inspect]").width(Length::FillPortion(1)),
+                monospace_bold("[Inspect]").width(Length::FillPortion(relative_widths[6])),
                 payload,
                 iced::widget::tooltip::Position::Left,
             )
@@ -55,36 +68,18 @@ impl ParsedPacket {
             .style(SolidTooltip::new())
             .into()
         } else {
-            monospace("").width(Length::FillPortion(1)).into()
+            monospace("")
+                .width(Length::FillPortion(relative_widths[6]))
+                .into()
         };
-
-        let dir = if inbound {
-            "INCOMING".to_string()
-        } else {
-            "OUTGOING".to_string()
-        };
-        let dir_text = monospace(dir)
-            .style(PostalColor::DIRECTION)
-            .width(Length::FillPortion(1));
-        let protocol_text = monospace(protocol)
-            .style(PostalColor::PROTOCOL)
-            .width(Length::FillPortion(1));
-        let port_text = monospace(format!(":{port}"))
-            .style(PostalColor::PORT)
-            .width(Length::FillPortion(1));
-        let source_text = monospace(source)
-            .style(PostalColor::SOURCE)
-            .width(Length::FillPortion(3));
-        let destination_text = monospace(dest)
-            .style(PostalColor::DESTINATION)
-            .width(Length::FillPortion(3));
 
         row![
-            dir_text,
-            protocol_text,
-            port_text,
-            source_text,
-            destination_text,
+            dir_text.width(Length::FillPortion(relative_widths[1])),
+            protocol_text.width(Length::FillPortion(relative_widths[1])),
+            port_text.width(Length::FillPortion(relative_widths[2])),
+            source_text.width(Length::FillPortion(relative_widths[3])),
+            destination_text.width(Length::FillPortion(relative_widths[4])),
+            size_text.width(Length::FillPortion(relative_widths[5])),
             inspect
         ]
         .width(Length::Fill)
