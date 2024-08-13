@@ -8,7 +8,7 @@ use super::monospace_text::monospace_bold;
 pub struct PacketList {}
 
 impl PacketList {
-    pub fn view<'a>(app: &'a Postal) -> Element<'a, Message> {
+    pub fn view(app: &Postal) -> Element<Message> {
         let relative_widths = [2, 1, 1, 1, 3, 3, 1, 1];
         let header = row![
             monospace_bold("Timestamp")
@@ -49,6 +49,8 @@ impl PacketList {
                         None => false,
                     }
             })
+            .rev()
+            .take(app.cache_size)
             .map(|p| {
                 p.view(
                     app.network_interface
@@ -58,8 +60,7 @@ impl PacketList {
                     &relative_widths,
                 )
             })
-            .rev()
-            .take(app.cache_size)
+
             .collect::<Vec<Element<Message>>>();
 
         let packet_list = container(
