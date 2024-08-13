@@ -9,13 +9,14 @@ pub enum PostalOption {
 impl PostalOption {
     pub fn as_map() -> HashMap<PostalOption, (bool, &'static str)> {
         let mut map = HashMap::new();
-        map.insert(
-            PostalOption::Autoscroll,
-            (
-                true,
-                "The packet list will automatically scroll down to the newest packet.",
-            ),
-        );
+        // Not useful atm since changing to most recent at top
+        // map.insert(
+        //     PostalOption::Autoscroll,
+        //     (
+        //         false,
+        //         "The packet list will automatically scroll down to the newest packet.",
+        //     ),
+        // );
         map.insert(
             PostalOption::HttpOnly,
             (

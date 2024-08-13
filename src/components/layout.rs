@@ -25,16 +25,15 @@ impl Layout {
                 .style(SubtleButton::new())
                 .on_press(Message::StopSniffing)
         };
-        let total_mem = app.packets.iter().fold(0, |acc, p| acc + p.data.len());
         let footer = row![
             button(monospace_bold("Clear").size(20))
                 .style(SubtleButton::new())
                 .on_press(Message::ClearCache),
             horizontal_space(),
             monospace(format!(
-                "Captured {} Packets. Current memory: {}",
+                "Packets captured: {}\nTotal size: {}",
                 app.total_captured,
-                format_size(total_mem)
+                format_size(app.total_mem)
             ))
             .size(16),
             horizontal_space(),

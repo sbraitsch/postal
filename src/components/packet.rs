@@ -47,10 +47,11 @@ impl ParsedPacket {
         };
 
         let dir = if inbound {
-            "INCOMING".to_string()
+            "Receiving".to_string()
         } else {
-            "OUTGOING".to_string()
+            "Sending".to_string()
         };
+        let timestamp_text = monospace_bold(&self.timestring);
         let dir_text = monospace_bold(dir);
         let protocol_text = monospace_bold(protocol).style(PostalColor::MATTBLUE);
         let port_text = monospace_bold(format!(":{port}")).style(PostalColor::ORANGE);
@@ -59,7 +60,7 @@ impl ParsedPacket {
         let size_text = monospace_bold(format_size(size));
         let inspect: Element<Message> = if port == 80 && !payload.is_empty() {
             Tooltip::new(
-                monospace_bold("[Inspect]").width(Length::FillPortion(relative_widths[6])),
+                monospace_bold("Inspect 💬").width(Length::FillPortion(relative_widths[7])),
                 payload,
                 iced::widget::tooltip::Position::Left,
             )
@@ -69,17 +70,18 @@ impl ParsedPacket {
             .into()
         } else {
             monospace("")
-                .width(Length::FillPortion(relative_widths[6]))
+                .width(Length::FillPortion(relative_widths[7]))
                 .into()
         };
 
         row![
+            timestamp_text.width(Length::FillPortion(relative_widths[0])),
             dir_text.width(Length::FillPortion(relative_widths[1])),
-            protocol_text.width(Length::FillPortion(relative_widths[1])),
-            port_text.width(Length::FillPortion(relative_widths[2])),
-            source_text.width(Length::FillPortion(relative_widths[3])),
-            destination_text.width(Length::FillPortion(relative_widths[4])),
-            size_text.width(Length::FillPortion(relative_widths[5])),
+            protocol_text.width(Length::FillPortion(relative_widths[2])),
+            port_text.width(Length::FillPortion(relative_widths[3])),
+            source_text.width(Length::FillPortion(relative_widths[4])),
+            destination_text.width(Length::FillPortion(relative_widths[5])),
+            size_text.width(Length::FillPortion(relative_widths[6])),
             inspect
         ]
         .width(Length::Fill)

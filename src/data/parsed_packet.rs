@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::net::IpAddr;
 use std::pin::Pin;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use pnet::packet::ip::IpNextHeaderProtocol;
 use pnet::packet::ipv6::Ipv6Packet;
@@ -17,6 +18,7 @@ use pnet::packet::{
 
 #[derive(Debug)]
 pub struct ParsedPacket {
+    pub timestring: String,
     pub data: Pin<Box<Vec<u8>>>,
     pub eth: EthernetPacket<'static>,
     pub net: NetworkPacket,
@@ -27,6 +29,7 @@ impl ParsedPacket {
     const ETHERNET_HEADER: usize = 14;
 
     pub fn parse(data: Vec<u8>, discard_non_http: bool) -> Option<Self> {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
         let raw_data_static: &'static [u8] = unsafe { std::mem::transmute(&data[..]) };
         let eth = EthernetPacket::new(raw_data_static)?;
         let net = match eth.get_ethertype() {
@@ -58,7 +61,13 @@ impl ParsedPacket {
             NetworkPacket::Other => return None,
         };
 
+        let hours = (now.as_secs() / 3600) % 24;
+        let minutes = (now.as_secs() / 60) % 60;
+        let seconds = now.as_secs() % 60;
+        let micros = now.subsec_micros();
+
         Some(Self {
+            timestring: format!("{:02}:{:02}:{:02}.{:06}", hours, minutes, seconds, micros),
             data: Pin::new(Box::new(data)),
             eth,
             net,
@@ -153,6 +162,7 @@ impl Clone for ParsedPacket {
         let eth_data = self.eth.packet().to_vec();
         let eth_clone = EthernetPacket::owned(eth_data).unwrap();
         Self {
+            timestring: self.timestring.clone(),
             data: self.data.clone(),
             eth: eth_clone,
             net: self.net.clone(),

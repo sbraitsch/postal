@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use iced::{widget::Text, Font};
+use iced::widget::Text;
 
 pub struct CustomFont;
 
@@ -14,9 +14,9 @@ impl CustomFont {
 }
 
 pub fn monospace<'a>(content: impl Into<Cow<'a, str>>) -> Text<'a> {
-    Text::new(content).font(Font::MONOSPACE)
+    Text::new(content) //.font(Font::MONOSPACE)
 }
 
 pub fn monospace_bold<'a>(content: impl Into<Cow<'a, str>>) -> Text<'a> {
-    Text::new(content).font(CustomFont::BOLD)
+    Text::new(content) //.font(CustomFont::BOLD)
 }

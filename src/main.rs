@@ -12,7 +12,6 @@ use data::parsed_packet::TransportPacket;
 use data::postal_option::PostalOption;
 use iced::executor;
 use iced::widget::scrollable;
-use iced::Font;
 use iced::Size;
 use iced::{Application, Command, Element, Settings, Subscription, Theme};
 use pnet::datalink;
@@ -35,7 +34,6 @@ static NETWORK_INTERFACES: Lazy<Vec<NetworkInterface>> = Lazy::new(|| {
 #[tokio::main]
 pub async fn main() -> iced::Result {
     let mut settings = Settings::default();
-    settings.default_font = Font::MONOSPACE;
     settings.window.size = Size::new(1600.0, 900.0);
     Postal::run(settings)
 }
@@ -45,6 +43,7 @@ struct Postal {
     capturing: bool,
     theme: Theme,
     total_captured: usize,
+    total_mem: usize,
     packets: Vec<ParsedPacket>,
     options: HashMap<PostalOption, (bool, &'static str)>,
     tp_types: HashMap<TransportPacket, bool>,
@@ -88,13 +87,14 @@ impl Application for Postal {
                 capturing: false,
                 theme: Theme::Light,
                 total_captured: 0,
-                packets: vec![],
+                total_mem: 0,
+                packets: Vec::with_capacity(1000),
                 options: PostalOption::as_map(),
                 tp_types: TransportPacket::as_map(),
                 port_input: String::new(),
                 port_list: vec![],
-                cache_input: String::from("1000"),
-                cache_size: 1000,
+                cache_input: String::from("200"),
+                cache_size: 200,
                 receiver: None,
                 cancellation_token: CancellationToken::new(),
                 network_interface: NETWORK_INTERFACES
@@ -163,7 +163,11 @@ impl Application for Postal {
                     .and_modify(|toggled| *toggled = b)
                     .or_default();
             }
-            Message::ClearCache => self.packets.clear(),
+            Message::ClearCache => {
+                self.total_mem = 0;
+                self.total_captured = 0;
+                self.packets.clear();
+            }
             Message::RowClicked(payload) => println!("{:?}", String::from_utf8(payload)),
             Message::PortInputChanged(ports) => self.port_input = ports,
             Message::PortFilterApplied => {
@@ -213,10 +217,13 @@ fn append_new_packets(
     new_packets: &mut Vec<ParsedPacket>,
 ) -> iced::Command<Message> {
     app.total_captured += new_packets.len();
+    app.total_mem += new_packets.iter().fold(0, |acc, p| acc + p.data.len());
     app.packets.append(new_packets);
-    if app.options[&PostalOption::Autoscroll].0 {
-        return scrollable::snap_to(SCROLLABLE_ID.clone(), scrollable::RelativeOffset::END);
-    } else {
-        Command::none()
-    }
+    Command::none()
+    // See comment in postal_option.rs
+    // if app.options[&PostalOption::Autoscroll].0 {
+    //     return scrollable::snap_to(SCROLLABLE_ID.clone(), scrollable::RelativeOffset::END);
+    // } else {
+    //     Command::none()
+    // }
 }

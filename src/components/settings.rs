@@ -36,7 +36,7 @@ impl<'a> Settings {
         .font(Font::MONOSPACE)
         .width(Length::Fill);
 
-        let window_input = TextInput::new("Packets in memory", &app.cache_input)
+        let window_input = TextInput::new("# of visible Packets", &app.cache_input)
             .on_input(Message::CacheInputChanged)
             .on_submit(Message::CacheSizeApplied)
             .font(Font::MONOSPACE)
@@ -71,7 +71,7 @@ impl<'a> Settings {
                 .padding(10)
                 .width(Length::Fill)
                 .align_items(Alignment::Start)
-                .push(column![monospace("Cache Size:"), window_input])
+                .push(column![monospace("View Limit:"), window_input])
                 .push(column![monospace("Network Interface:"), interface_picker])
                 .push(column![
                     monospace("Theme:"),
