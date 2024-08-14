@@ -22,12 +22,14 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
 use once_cell::sync::Lazy;
+use crate::data::os_network_interface::OSNetworkInterface;
 
 static SCROLLABLE_ID: Lazy<scrollable::Id> = Lazy::new(scrollable::Id::unique);
-static NETWORK_INTERFACES: Lazy<Vec<NetworkInterface>> = Lazy::new(|| {
+static NETWORK_INTERFACES: Lazy<Vec<OSNetworkInterface>> = Lazy::new(|| {
     datalink::interfaces()
         .into_iter()
-        .filter(|e| e.is_up() && !e.is_loopback() && !e.ips.is_empty())
+        .filter(|e| !e.ips.is_empty())
+        .map(|i| OSNetworkInterface::new(i))
         .collect()
 });
 
@@ -53,7 +55,7 @@ struct Postal {
     cache_size: usize,
     receiver: Option<Arc<Mutex<Receiver<ParsedPacket>>>>,
     cancellation_token: CancellationToken,
-    network_interface: NetworkInterface,
+    network_interface: OSNetworkInterface,
 }
 
 #[derive(Debug, Clone)]
@@ -99,9 +101,9 @@ impl Application for Postal {
                 cancellation_token: CancellationToken::new(),
                 network_interface: NETWORK_INTERFACES
                     .iter()
-                    .find(|i| i.ips.iter().any(|ip| ip.is_ipv4() && !i.is_loopback()))
+                    .find(|i| i.interface.ips.iter().any(|ip| ip.is_ipv4() && !i.interface.is_loopback()))
                     .expect("No default network interface found.")
-                    .clone(),
+                    .clone()
             },
             Command::none(),
         )
@@ -132,7 +134,7 @@ impl Application for Postal {
                 let ninf = self.network_interface.clone();
                 let http_only = self.options[&PostalOption::HttpOnly].0;
                 tokio::task::spawn_blocking(move || {
-                    PacketSubscription::sniff(tx, ninf, http_only, token)
+                    PacketSubscription::sniff(tx, ninf.interface, http_only, token)
                 });
                 self.capturing = true;
             }
@@ -152,7 +154,7 @@ impl Application for Postal {
                 self.cancellation_token.cancel();
                 self.network_interface = NETWORK_INTERFACES
                     .iter()
-                    .find(|i| i.name == n)
+                    .find(|i| i.get_identifier() == &n)
                     .expect("Network Interface not recognized")
                     .clone();
                 self.packets.clear();

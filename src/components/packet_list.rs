@@ -54,6 +54,7 @@ impl PacketList {
             .map(|p| {
                 p.view(
                     app.network_interface
+                        .interface
                         .ips
                         .iter()
                         .any(|nw| nw.ip() == p.get_source_ip().unwrap()),

@@ -28,7 +28,7 @@ impl<'a> Settings {
         let interface_picker = pick_list(
             NETWORK_INTERFACES
                 .iter()
-                .map(|int| int.name.to_string())
+                .map(|int| int.get_identifier().to_string())
                 .collect::<Vec<String>>(),
             Some(app.network_interface.to_string()),
             Message::NetworkInterfaceSelected,
