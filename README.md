@@ -2,5 +2,8 @@
 
 Alternative names: Wireguppy, Kabelpeepo
 
-Postal is a packet sniffer that shows incoming and outgoing traffic on a selected network interface.
-It's built using iced and pnet.
+A simple packet sniffer that shows incoming and outgoing traffic on a selected network interface.<br>
+
+Built using iced and pnet.<br>
+
+Running on Windows will require a working installation of Npcap.
